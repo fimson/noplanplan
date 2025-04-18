@@ -1,12 +1,35 @@
-# React + Vite
+# 🧠 NoPlanPlan
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**NoPlanPlan** is a collaborative planning app for families who live in chaos but still get sh*t done.  
+Originally built to plan a trip to Japan, now evolving into a full-blown tactical family command center.
 
-Currently, two official plugins are available:
+## 🚀 Features (so far)
+- 📝 Shared wishlist with links, images, and vote system
+- 👥 User login via Firebase (each family member gets their own login)
+- 🧠 Real-time updates across devices
+- 📅 Logistics tracking (hotels, transport, checklists)
+- 🛠️ Built with modern web tech for future expansion
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Coming soon:
+- 📷 Upload travel photos or location previews
+- 🤖 AI-generated itineraries and "don’t miss this" suggestions
+- 💬 Comments & tagging ("This one was YOUR idea, remember?")
+- 🔔 Notifications so your family stops ignoring the plan
 
-## Expanding the ESLint configuration
+## 🧰 Tech Stack
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| Layer | Tool |
+|-------|------|
+| Frontend | [React](https://react.dev/) with [Vite](https://vitejs.dev/) |
+| Backend | [Firebase](https://firebase.google.com/) (Auth, Firestore, Hosting) |
+| Dev Tools | Cursor / VS Code, GitHub |
+
+## ⚙️ Getting Started
+
+### Clone and install
+
+```bash
+git clone https://github.com/fimson/NoPlanPlan.git
+cd NoPlanPlan
+npm install
+npm run dev
