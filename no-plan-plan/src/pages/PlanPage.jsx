@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import RegionManager from '/src/components/RegionManager.jsx';
 
@@ -46,6 +46,18 @@ function PlanPage() {
   ];
   
   const [regions, setRegions] = useState(defaultRegions);
+
+  // Effect to save regions to localStorage whenever they change
+  useEffect(() => {
+    if (planId) {
+      try {
+        localStorage.setItem(`regions-${planId}`, JSON.stringify(regions));
+        console.log(`Regions saved to localStorage for plan ${planId}`);
+      } catch (error) {
+        console.error("Error saving regions to localStorage:", error);
+      }
+    }
+  }, [regions, planId]); // Re-run if regions or planId change
 
   const handleSaveChanges = () => {
     setPlan({...editForm});

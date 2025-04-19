@@ -4,6 +4,10 @@ function RegionManager({ regions, setRegions, planId }) {
   const [newRegionName, setNewRegionName] = useState('');
   const [newRegionNotes, setNewRegionNotes] = useState('');
   const [wishlistItems, setWishlistItems] = useState([]);
+  
+  // State for inline editing
+  const [editingRegionId, setEditingRegionId] = useState(null);
+  const [editingRegionName, setEditingRegionName] = useState('');
 
   useEffect(() => {
     if (!planId) return;
@@ -40,7 +44,31 @@ function RegionManager({ regions, setRegions, planId }) {
   const handleDeleteRegion = (idToDelete) => {
     setRegions(regions.filter(region => region.id !== idToDelete));
   };
+
+  // Handlers for inline editing
+  const handleEditClick = (region) => {
+    setEditingRegionId(region.id);
+    setEditingRegionName(region.name);
+  };
+
+  const handleSaveEdit = (regionId) => {
+    if (!editingRegionName.trim()) return; // Prevent saving empty name
+    setRegions(regions.map(region => 
+      region.id === regionId ? { ...region, name: editingRegionName.trim() } : region
+    ));
+    setEditingRegionId(null);
+    setEditingRegionName('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRegionId(null);
+    setEditingRegionName('');
+  };
   
+  const handleEditInputChange = (e) => {
+    setEditingRegionName(e.target.value);
+  };
+
   const getWishlistItemCount = (regionId) => {
     if (!regionId || wishlistItems.length === 0) return 0;
     return wishlistItems.filter(item => item.regionId === regionId).length;
@@ -129,22 +157,64 @@ function RegionManager({ regions, setRegions, planId }) {
                 className="list-group-item region-list-item"
                 style={listGroupItemStyle}
               >
-                <div>
-                  <span style={{ fontWeight: '600' }}>{region.name}</span>
-                  {count > 0 && (
-                    <span className="badge bg-info ms-2" style={{ fontSize: '0.7em' }}>
-                      {count} {count === 1 ? 'item' : 'items'}
-                    </span>
-                  )}
-                  {region.notes && <small className="d-block text-muted" style={{ marginLeft: '10px' }}>{region.notes}</small>}
-                </div>
-                <button
-                  onClick={() => handleDeleteRegion(region.id)}
-                  className="btn btn-danger btn-sm"
-                  style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
-                >
-                  Delete
-                </button>
+                {editingRegionId === region.id ? (
+                  // Editing view
+                  <div className="d-flex align-items-center flex-grow-1">
+                    <input
+                      type="text"
+                      className="form-control form-control-sm me-2"
+                      value={editingRegionName}
+                      onChange={handleEditInputChange}
+                      style={{ ...inputStyle, flexBasis: '60%' }}
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(region.id)}
+                    />
+                    <button 
+                      onClick={() => handleSaveEdit(region.id)} 
+                      className="btn btn-success btn-sm me-1"
+                      style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                      disabled={!editingRegionName.trim()}
+                    >
+                      Save
+                    </button>
+                    <button 
+                      onClick={handleCancelEdit} 
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  // Default view
+                  <>
+                    <div className="flex-grow-1">
+                      <span style={{ fontWeight: '600' }}>{region.name}</span>
+                      {count > 0 && (
+                        <span className="badge bg-info ms-2" style={{ fontSize: '0.7em' }}>
+                          {count} {count === 1 ? 'item' : 'items'}
+                        </span>
+                      )}
+                      {region.notes && <small className="d-block text-muted" style={{ marginLeft: '10px' }}>{region.notes}</small>}
+                    </div>
+                    <div className="ms-2">
+                      <button
+                        onClick={() => handleEditClick(region)}
+                        className="btn btn-primary btn-sm me-1"
+                        style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRegion(region.id)}
+                        className="btn btn-danger btn-sm"
+                        style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
               </li>
             );
           })}

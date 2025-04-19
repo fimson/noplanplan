@@ -65,7 +65,7 @@ function App() {
         </footer>
       </div>
       
-      <style jsx global>{`
+      <style jsx="true" global="true">{`
         .back-link {
           top: 0;
           left: 0;

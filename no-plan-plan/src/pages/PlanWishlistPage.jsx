@@ -12,9 +12,11 @@ function PlanWishlistPage() {
 
   return (
     <div className="plan-wishlist-page">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <div>
-          <h2 className="fw-bold">{planDetails.title}</h2>
+      <div className="d-flex flex-column align-items-center mb-4">
+        <div className="text-center">
+          <h1 className="text-4xl font-extrabold tracking-tight text-center text-gray-100 mt-6 mb-2">
+            So where we go?
+          </h1>
           <div className="mt-2">
             <Link to={`/plan/${planId}`} className="btn btn-sm btn-outline-secondary me-2">
               Overview

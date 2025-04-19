@@ -17,7 +17,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://www.2aussietravellers.com/wp-content/uploads/2018/07/Shinkyo-Bridge-in-Nikko-2.jpg",
         description: "Shrines and waterfalls",
         createdAt: new Date().toISOString(),
-        planned: false
+        planned: false,
+        regionId: 'region0' // Restore sample region
       },
       {
         id: 'shibuya',
@@ -27,7 +28,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://assets.vogue.com/photos/659db809e0e9934642099815/16:9/w_6000,h_3375,c_limit/1189690204",
         description: "Shibuya Crossing",
         createdAt: new Date(Date.now() - 86400000).toISOString(),
-        planned: false
+        planned: false,
+        regionId: 'region0' // Restore sample region
       },
       {
         id: 'fushimi-inari',
@@ -37,7 +39,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://lh3.googleusercontent.com/gps-cs-s/AB5caB8E208ojDIa3zPw4Ssp67l66OBVM2JhONi-rz8TCWhmpSqXkXW9LpV9YA360aqB5uHU760pmg3cCX5f8ObsQQ0lbmu46bNYC2QCIRX50v0RwkHf_GHEaubZYDb2xOHB-4q2-gI=s680-w680-h510",
         description: "Famous shrine with thousands of red torii gates in Kyoto",
         createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-        planned: false
+        planned: false,
+        regionId: 'region1' // Restore sample region
       },
       {
         id: 'kinkakuji',
@@ -47,7 +50,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://www.japan-guide.com/g18/3908_top.jpg",
         description: "Zen temple covered in gold leaf in Kyoto",
         createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
-        planned: false
+        planned: false,
+        regionId: 'region1' // Restore sample region
       }
     ];
   } else if (planId === 'iceland-2026') {
@@ -60,7 +64,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?q=80&w=1000&auto=format&fit=crop",
         description: "Iconic iron tower in Paris",
         createdAt: new Date().toISOString(),
-        planned: false
+        planned: false,
+        regionId: 'region0' // Restore sample region
       },
       {
         id: 'colosseum',
@@ -70,7 +75,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://images.unsplash.com/photo-1552432552-06c0b0a94dda?q=80&w=1000&auto=format&fit=crop",
         description: "Ancient Roman amphitheater",
         createdAt: new Date(Date.now() - 86400000).toISOString(),
-        planned: false
+        planned: false,
+        regionId: 'region1' // Restore sample region
       }
     ];
   } else {
@@ -84,7 +90,8 @@ function Wishlist({ planId, onAddToPlanning }) {
         imageUrl: "https://images.unsplash.com/photo-1528127269322-539801943592?q=80&w=1000&auto=format&fit=crop",
         description: "Start building your travel wishlist",
         createdAt: new Date().toISOString(),
-        planned: false
+        planned: false,
+        regionId: null
       }
     ];
   }
@@ -153,13 +160,23 @@ function Wishlist({ planId, onAddToPlanning }) {
   const [showAddToPlanModal, setShowAddToPlanModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   
-  // TODO: Fetch/load regions based on planId in a real app
-  const [regions, setRegions] = useState([ 
-    // Sample regions for now - replace with actual loading mechanism
-    { id: 'tokyo', name: 'Tokyo Area' },
-    { id: 'kyoto', name: 'Kyoto Prefecture' }
-
-  ]);
+  // Load regions from localStorage based on planId
+  const [regions, setRegions] = useState(() => {
+    if (!planId) return [];
+    const regionsKey = `regions-${planId}`;
+    try {
+      const storedRegions = localStorage.getItem(regionsKey);
+      if (storedRegions) {
+          console.log(`Loaded regions for plan ${planId} from localStorage:`, JSON.parse(storedRegions));
+          return JSON.parse(storedRegions);
+      }
+      console.log(`No regions found in localStorage for plan ${planId}`);
+      return [];
+    } catch (error) {
+      console.error("Error loading regions from localStorage:", error);
+      return [];
+    }
+  });
   
   // Save items to localStorage whenever they change
   useEffect(() => {
@@ -170,35 +187,36 @@ function Wishlist({ planId, onAddToPlanning }) {
     }
   }, [items, planId]);
 
-  // --- Simulated AI Helper Function ---
-  const enhanceWishlistItemDetails = async (title, availableRegions) => {
-    if (!title) return { correctedTitle: title, suggestedRegionId: null };
-
-    // 1. Title Correction (Basic)
-    let correctedTitle = title
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-      
-    // Simple typo fix example
-    correctedTitle = correctedTitle.replace(/\bTokio\b/gi, 'Tokyo');
-
-    // 2. Region Assignment (Basic String Matching)
-    let suggestedRegionId = null;
-    const lowerCaseTitle = correctedTitle.toLowerCase();
-    for (const region of availableRegions) {
-      if (lowerCaseTitle.includes(region.name.toLowerCase())) {
-        suggestedRegionId = region.id;
-        break; // Assign the first match
-      }
-    }
+  // Group items by region
+  const getItemsByRegion = () => {
+    // Create a map to hold items grouped by region
+    const groupedItems = new Map();
     
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 300)); 
+    // Add "Unassigned Items" category 
+    groupedItems.set(null, []);
+    
+    // Initialize groups for each existing region
+    regions.forEach(region => {
+      if (region && region.id) { // Ensure region and region.id exist
+        groupedItems.set(region.id, []);
+      }
+    });
 
-    return { correctedTitle, suggestedRegionId };
+    // Distribute items to their respective region groups
+    items.forEach(item => {
+      const regionId = item.regionId || null;
+      if (groupedItems.has(regionId)) {
+        groupedItems.get(regionId).push(item);
+      } else if (regionId !== null) {
+        // Handle case where an item's regionId exists but wasn't in the initial regions list (e.g., stale data)
+        console.warn(`Item regionId '${regionId}' not found in current regions list. Grouping separately.`);
+        groupedItems.set(regionId, [item]);
+      }
+      // If regionId is null, it's already handled by the initialization
+    });
+    
+    return groupedItems;
   };
-  // --- End AI Helper ---
 
   const fetchMissingDetails = async (title) => {
     setIsLoading(true);
@@ -275,85 +293,128 @@ function Wishlist({ planId, onAddToPlanning }) {
   };
 
   const addItem = async () => {
-    if (newItem.trim() === '') return;
-    
-    // Start loading state
+    const originalTitle = newItem.trim();
+    if (originalTitle === '') return;
+
     setIsLoading(true);
-    
-    // --- Call AI Helper --- 
-    const { correctedTitle, suggestedRegionId } = await enhanceWishlistItemDetails(newItem, regions);
-    
-    // Auto-select region if suggested by AI and not already manually selected
-    let regionToUse = selectedRegion; // Start with manually selected region
-    if (suggestedRegionId && !selectedRegion) { 
-      regionToUse = suggestedRegionId;
-      setSelectedRegion(suggestedRegionId); // Update state to reflect in dropdown
-    }
-    // --- End AI Helper Call ---
-    
-    // Generate a unique ID
-    const id = correctedTitle.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(); // Use corrected title for ID
-    
-    let itemToAdd = { 
-      id,
-      title: correctedTitle, // Use corrected title
-      votes: 0,
-      link: newItemLink.trim() || null,
-      imageUrl: newItemImage.trim() || null,
-      description: newItemDescription.trim() || null,
-      createdAt: new Date().toISOString(),
-      planned: false,
-      regionId: regionToUse || null // Use determined region ID
-    };
-    
-    // If some fields are missing, try to fill them with our helper
-    const needsCompletion = !itemToAdd.description || !itemToAdd.link || !itemToAdd.imageUrl;
-    
-    if (needsCompletion && !editIndex) {
-      console.log("Missing details, fetching data...");
+    console.log("Adding item:", originalTitle);
+    console.log("Manually selected region:", selectedRegion || 'None');
+
+    let aiResult = {}; // Initialize empty AI result
+    const needsAIDetails = !newItemDescription.trim() || !newItemLink.trim() || !newItemImage.trim();
+    const needsAIRegion = !selectedRegion;
+    const needsAICall = needsAIDetails || needsAIRegion;
+
+    // --- Step 1: Call AI Function if needed --- 
+    if (needsAICall) {
+      const functionUrl = "https://processwishlistitem-vsjk6mhqqq-uc.a.run.app"; // Use the actual URL
+      console.log(`Attempting AI call to: ${functionUrl}`);
       try {
-        const completedDetails = await fetchMissingDetails(correctedTitle);
-        
-        if (completedDetails) {
-          console.log("Got completed details:", completedDetails);
-          // Only replace fields that were empty
-          if (!itemToAdd.description && completedDetails.description) {
-            itemToAdd.description = completedDetails.description;
-          }
-          
-          if (!itemToAdd.link && completedDetails.link) {
-            itemToAdd.link = completedDetails.link;
-          }
-          
-          if (!itemToAdd.imageUrl && completedDetails.imageUrl) {
-            itemToAdd.imageUrl = completedDetails.imageUrl;
-          }
+        const response = await fetch(functionUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: originalTitle,
+            availableRegions: regions, 
+            needsRegionSuggestion: needsAIRegion 
+          }),
+        });
+  
+        if (!response.ok) {
+          const errorBody = await response.text();
+          console.error("Cloud Function Error Response:", errorBody);
+          // Throw an error to be caught by the catch block
+          throw new Error(`Cloud Function request failed: ${response.status} ${response.statusText}`);
         }
+  
+        aiResult = await response.json();
+        // Ensure expected fields exist, defaulting to null if not provided by AI
+        aiResult.correctedTitle = aiResult.correctedTitle || originalTitle;
+        aiResult.description = aiResult.description || null;
+        aiResult.link = aiResult.link || null;
+        aiResult.imageUrl = aiResult.imageUrl || null;
+        aiResult.suggestedRegionId = aiResult.suggestedRegionId || null;
+
+        console.log("Received AI Result:", aiResult);
+
       } catch (error) {
-        console.error("Error completing details:", error);
+        console.error("Error calling Cloud Function:", error);
+        // Reset aiResult on error to avoid using partial/bad data
+        aiResult = {
+            correctedTitle: originalTitle, // Fallback to original title on error
+            description: null,
+            link: null,
+            imageUrl: null,
+            suggestedRegionId: null
+        };
+        // Optional: Notify user the AI suggestions failed
+        // alert("Could not get AI suggestions. Please fill in details manually.");
       }
-    }
-    
-    // Now add the item (with enhanced details if available)
-    if (editIndex !== null) {
-      // Update existing item
-      const updated = [...items];
-      // Preserve the votes count and planned status when editing
-      itemToAdd.votes = updated[editIndex].votes;
-      itemToAdd.planned = updated[editIndex].planned;
-      itemToAdd.id = updated[editIndex].id; // Keep the same ID
-      
-      updated[editIndex] = itemToAdd;
-      setItems(updated);
-      setEditIndex(null);
     } else {
-      // Add new item at the beginning to ensure left-to-right flow
-      setItems([itemToAdd, ...items]);
+      console.log("No AI call needed, all details provided manually.");
+      // Ensure aiResult structure is consistent even if no call was made
+      aiResult = { 
+          correctedTitle: originalTitle, 
+          description: null, 
+          link: null, 
+          imageUrl: null, 
+          suggestedRegionId: null 
+      };
     }
-    
-    // Reset the form and loading state
-    resetForm();
-    setIsLoading(false);
+
+    // --- Step 2: Determine Final Values --- 
+    // Prioritize user input, then AI result (if available), then null.
+    const finalTitle = aiResult.correctedTitle || originalTitle; // Use corrected title if available
+    const finalDescription = newItemDescription.trim() || aiResult.description;
+    const finalLink = newItemLink.trim() || aiResult.link;
+    const finalImageUrl = newItemImage.trim() || aiResult.imageUrl;
+    const finalRegionId = selectedRegion || aiResult.suggestedRegionId;
+
+    console.log("Final Region ID determined:", finalRegionId || 'None');
+
+    // --- Step 3: Prepare and Add Item --- 
+    try {
+      const id = finalTitle.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
+
+      const itemToAdd = {
+        id,
+        title: finalTitle,
+        votes: 0,
+        link: finalLink,
+        imageUrl: finalImageUrl, 
+        description: finalDescription,
+        createdAt: new Date().toISOString(),
+        planned: false,
+        regionId: finalRegionId, 
+      };
+      
+      console.log("Final item to add/update:", itemToAdd);
+
+      // Add or Update item in state
+      if (editIndex !== null) {
+        const updated = [...items];
+        itemToAdd.votes = updated[editIndex].votes;
+        itemToAdd.planned = updated[editIndex].planned;
+        itemToAdd.id = updated[editIndex].id; 
+        updated[editIndex] = itemToAdd;
+        setItems(updated);
+        setEditIndex(null);
+        console.log("Item updated.");
+      } else {
+        setItems([itemToAdd, ...items]);
+        console.log("Item added.");
+      }
+      resetForm(); 
+
+    } catch (stateError) {
+      // Catch errors specifically related to updating state or resetting form
+      console.error("Error updating state or resetting form:", stateError);
+      alert(`Error saving item locally: ${stateError.message}`); 
+    } finally {
+      // This ensures loading state is always turned off
+      setIsLoading(false);
+      console.log("Finished addItem process.");
+    }
   };
 
   const resetForm = () => {
@@ -453,12 +514,156 @@ function Wishlist({ planId, onAddToPlanning }) {
     return regions.find(r => r.id === regionId);
   };
 
+  // Get items grouped by region
+  const itemsByRegion = getItemsByRegion();
+
+  // Map region names to icons (adjust as needed)
+  const regionIcons = {
+    'Tokyo Area': '🗼',
+    'Kyoto Region': '⛩️',
+    'Osaka': '🏯',
+    'Hokkaido': '🏔️',
+    'Reykjavik': '🏘️',
+    'Golden Circle': '⭕',
+    'South Coast': '🌊',
+    // Add more mappings here
+  };
+
+  // Render a card for an item 
+  const renderItemCard = (item) => {
+    const regionDetails = getRegionDetails(item.regionId);
+    const itemIndex = items.findIndex(i => i.id === item.id);
+
+    return (
+      <div key={item.id} className="col-lg-3 col-md-6 col-12">
+        <div className="card h-100">
+          {item.imageUrl && (
+            <div className="card-img-top-wrapper" style={{ height: '180px', overflow: 'hidden' }}>
+              <img 
+                src={item.imageUrl} 
+                className="card-img-top"
+                alt={item.title}
+                style={{ objectFit: 'cover', height: '100%', width: '100%' }}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://placehold.co/400x300/222/666?text=Image+Error';
+                }} 
+              />
+            </div>
+          )}
+          
+          <div className="card-body"> 
+            <h5 className="card-title text-truncate" style={{ textAlign: 'center' }}>
+              {item.link ? (
+                <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-info">
+                  {item.title}
+                </a>
+              ) : (
+                item.title
+              )}
+            </h5>
+            
+            {item.description && (
+              <p className="card-text description-text" style={{ textAlign: 'center' }}>
+                {item.description}
+              </p>
+            )}
+          </div>
+          
+          {regionDetails && (
+            <div className="region-info mb-2 px-3 d-flex justify-content-center" style={{ fontSize: '0.8rem' }}>
+              <span className="badge rounded-pill bg-info text-dark px-2 py-1">
+                {regionDetails.name}
+              </span>
+            </div>
+          )}
+        
+          <div className="card-footer">
+            <div className="d-flex justify-content-between align-items-center mt-2 mb-2"> 
+              <div className="d-flex align-items-center">
+                <span className="me-2">{item.votes} votes</span>
+                <button 
+                  onClick={() => upvoteItem(itemIndex)} 
+                  className="btn btn-sm btn-outline-primary"
+                  title="Upvote"
+                  disabled={itemIndex === -1} 
+                >
+                  👍
+                </button>
+              </div>
+              
+              <div className="btn-group">
+                <button 
+                  onClick={() => editItem(itemIndex)} 
+                  className="btn btn-sm btn-outline-secondary"
+                  title="Edit"
+                  disabled={itemIndex === -1} 
+                >
+                  ✏️
+                </button>
+                <button 
+                  onClick={() => deleteItem(itemIndex)} 
+                  className="btn btn-sm btn-outline-danger"
+                  title="Delete"
+                  disabled={itemIndex === -1} 
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+            
+            {planId && (
+              <div className="d-grid">
+                <button
+                  className="btn btn-sm btn-outline-success"
+                  onClick={() => {
+                    handleAddToPlan(item); 
+                  }}
+                  disabled={item.planned}
+                >
+                  {item.planned ? 'Added to Plan' : 'Add to Plan'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render region section with header and cards
+  const renderRegionSection = (regionId, regionItems) => {
+    if (!regionItems || regionItems.length === 0) return null; 
+    
+    const regionDetails = getRegionDetails(regionId);
+    const regionName = regionDetails ? regionDetails.name : 'Unassigned Items';
+    const icon = regionDetails ? (regionIcons[regionDetails.name] || '📍') : '❓';
+    
+    return (
+      <div key={regionId || 'no-region'} className="region-section mb-5">
+        <div className="region-header mb-3">
+          <h3 className="fs-4 fw-semibold text-white-50 mt-5 border-bottom border-secondary pb-2 text-center">
+            <span className="me-2">{icon}</span> 
+            {regionName}
+          </h3>
+        </div>
+        <div className="row g-4">
+          {regionItems.map((item) => renderItemCard(item))} 
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="wishlist-container">
+      {/* Remove this Wishlist header */}
+      {/* 
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="fw-bold">Wishlist</h2>
       </div>
+      */}
       
+      {/* Add Item Form */}
       <div className="card bg-dark mb-4">
         <div className="card-body">
           <input
@@ -474,19 +679,19 @@ function Wishlist({ planId, onAddToPlanning }) {
           {!expandedForm ? (
             <button 
               onClick={() => setExpandedForm(true)} 
-              className="btn btn-secondary w-100" 
+              className="btn btn-secondary w-100"
               disabled={isLoading}
             >
-              More Options
+              More Options ▼ 
             </button>
           ) : (
-            <div className="expanded-form">
+            <div className={`expanded-form ${expandedForm ? 'show' : ''}`}>
               <input
                 type="text"
                 className="form-control mb-3"
                 value={newItemLink}
                 onChange={(e) => setNewItemLink(e.target.value)}
-                placeholder="Link (optional)"
+                placeholder="Link (optional - AI can suggest)"
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
               />
@@ -495,7 +700,7 @@ function Wishlist({ planId, onAddToPlanning }) {
                 className="form-control mb-3"
                 value={newItemImage}
                 onChange={(e) => setNewItemImage(e.target.value)}
-                placeholder="Image URL (optional)"
+                placeholder="Image URL (optional - AI can suggest)"
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
               />
@@ -503,14 +708,13 @@ function Wishlist({ planId, onAddToPlanning }) {
                 className="form-control mb-3"
                 value={newItemDescription}
                 onChange={(e) => setNewItemDescription(e.target.value)}
-                placeholder="Description (optional)"
+                placeholder="Description (optional - AI can suggest)"
                 rows="3"
                 disabled={isLoading}
               />
               
-              {/* Region Selection Dropdown */}
               <div className="mb-3">
-                  <label htmlFor="regionSelect" className="form-label" style={{ fontSize: '0.85rem' }}>Region (optional)</label>
+                  <label htmlFor="regionSelect" className="form-label" style={{ fontSize: '0.85rem' }}>Region (optional - AI can suggest)</label>
                   <select 
                       id="regionSelect"
                       className="form-select form-select-sm"
@@ -518,7 +722,7 @@ function Wishlist({ planId, onAddToPlanning }) {
                       onChange={(e) => setSelectedRegion(e.target.value)}
                       disabled={isLoading}
                   >
-                      <option value="">Select Region...</option>
+                      <option value="">Auto-suggest Region...</option>
                       {regions.map(region => (
                           <option key={region.id} value={region.id}>
                               {region.name}
@@ -551,6 +755,14 @@ function Wishlist({ planId, onAddToPlanning }) {
                     editIndex !== null ? 'Update' : 'Add'
                   )}
                 </button>
+                <button 
+                    onClick={() => setExpandedForm(false)} 
+                    className="btn btn-outline-secondary ms-auto"
+                    title="Collapse Options"
+                    type="button"
+                 >
+                    ▲
+                 </button>
               </div>
             </div>
           )}
@@ -558,128 +770,15 @@ function Wishlist({ planId, onAddToPlanning }) {
       </div>
 
       {items.length > 0 ? (
-        <div className="row g-4">
-          {items.map((item, index) => {
-            const regionDetails = getRegionDetails(item.regionId);
-            return (
-              <div key={item.id || index} className="col-lg-3 col-md-6 col-12">
-                <div className="card h-100">
-                  {item.planned && (
-                    <div className="planned-badge">
-                      <span className="badge bg-success">Planned</span>
-                    </div>
-                  )}
-                  
-                  {item.imageUrl && (
-                    <div className="card-img-top-wrapper" style={{ height: '180px', overflow: 'hidden' }}>
-                      <img 
-                        src={item.imageUrl} 
-                        className="card-img-top"
-                        alt={item.title}
-                        style={{ objectFit: 'cover', height: '100%', width: '100%' }}
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = 'https://placehold.co/400x300/222/666?text=Image+Error';
-                        }} 
-                      />
-                    </div>
-                  )}
-                  
-                  <div className="card-body">
-                    <h5 className="card-title text-truncate">
-                      {item.link ? (
-                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-info">
-                          {item.title}
-                        </a>
-                      ) : (
-                        item.title
-                      )}
-                    </h5>
-                    
-                    {item.description && (
-                      <p className="card-text description-text">
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                  
-                  {/* Display Region Info */}
-                  {regionDetails && (
-                    <div className="region-info my-2 px-3" style={{ fontSize: '0.8rem' }}>
-                      <span className="badge bg-secondary">
-                        {regionDetails.name}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="card-footer">
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <div className="d-flex align-items-center">
-                      <span className="me-2">{item.votes} votes</span>
-                      <button 
-                        onClick={() => upvoteItem(index)} 
-                        className="btn btn-sm btn-outline-primary"
-                        title="Upvote"
-                      >
-                        👍
-                      </button>
-                    </div>
-                    
-                    <div className="btn-group">
-                      <button 
-                        onClick={() => editItem(index)} 
-                        className="btn btn-sm btn-outline-secondary"
-                        title="Edit"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => deleteItem(index)} 
-                        className="btn btn-sm btn-outline-danger"
-                        title="Delete"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {planId && (
-                    <div className="d-grid">
-                      <button
-                        className="btn btn-sm btn-outline-success"
-                        onClick={() => {
-                          if (onAddToPlanning) {
-                            // When opened from planning page, directly add to that day without showing modal
-                            const activityData = {
-                              title: item.title,
-                              description: item.description,
-                              location: '',
-                              wishlistItemId: item.id
-                            };
-                            
-                            // Mark the item as planned in the wishlist
-                            const updatedItems = items.map(i => 
-                              i.id === item.id ? {...i, planned: true} : i
-                            );
-                            setItems(updatedItems);
-                            
-                            onAddToPlanning(activityData);
-                          } else {
-                            // Otherwise show the select day modal
-                            handleAddToPlan(item);
-                          }
-                        }}
-                        disabled={item.planned}
-                      >
-                        {item.planned ? 'Added to Plan' : 'Add to Plan'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div>
+          {renderRegionSection(null, itemsByRegion.get(null))}
+          
+          {Array.from(itemsByRegion.entries())
+            .filter(([regionId, regionItems]) => regionId !== null && regionItems && regionItems.length > 0)
+            .map(([regionId, regionItems]) => 
+              renderRegionSection(regionId, regionItems)
+            )
+          }
         </div>
       ) : (
         <div className="alert alert-info text-center">
@@ -687,7 +786,6 @@ function Wishlist({ planId, onAddToPlanning }) {
         </div>
       )}
       
-      {/* Modal for adding to plan */}
       {showAddToPlanModal && selectedItem && onAddToPlanning === null && (
         <div className="modal show d-block" tabIndex="-1" role="dialog">
           <div className="modal-dialog modal-dialog-centered">
@@ -722,7 +820,7 @@ function Wishlist({ planId, onAddToPlanning }) {
         </div>
       )}
 
-      <style jsx>{`
+      <style jsx="true">{`
         .description-text {
           display: -webkit-box;
           -webkit-line-clamp: 3;
@@ -750,6 +848,37 @@ function Wishlist({ planId, onAddToPlanning }) {
         
         .modal {
           z-index: 1050;
+        }
+        
+        .region-header h3 {
+          color: #6c757d;
+        }
+        
+        .region-info .badge {
+          background: linear-gradient(135deg, #3b5998 0%, #1e3c72 100%);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 0.4em 0.6em;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          transition: all 0.2s ease;
+        }
+        
+        .region-info .badge:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .expanded-form {
+          max-height: 0;
+          overflow: hidden;
+          transition: max-height 0.5s ease-out; 
+          opacity: 0;
+          transition: max-height 0.5s ease-out, opacity 0.3s ease-out;
+        }
+
+        .expanded-form.show {
+          max-height: 500px;
+          opacity: 1;
+          transition: max-height 0.5s ease-in, opacity 0.3s 0.1s ease-in;
         }
       `}</style>
     </div>
