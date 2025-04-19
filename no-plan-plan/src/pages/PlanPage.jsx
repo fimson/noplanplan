@@ -11,13 +11,29 @@ function PlanPage() {
       ? 'Celebrating Yoki\'s birthday in the land of the rising sun' 
       : 'Experience the adventure',
     image: planId === 'japan-2025'
-      ? 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=1000&auto=format&fit=crop'
+      ? 'https://www.thetrainline.com/cmsmedia/cms/7709/japan_2x.jpg'
       : 'https://media.cntraveler.com/photos/60748e5ed1058698d13c31ee/16:9/w_1920%2Cc_limit/Vatnajokull-Iceland-GettyImages-655074449.jpg',
     startDate: '',
     endDate: '',
     budget: '',
     notes: ''
   });
+  
+  // Get appropriate flag for the plan
+  const getTripFlag = () => {
+    if (planId === 'japan-2025') return '🇯🇵';
+    if (planId === 'iceland-2026') return '🇮🇸';
+    return '🌍';
+  };
+
+  // Get appropriate tagline for the plan
+  const getTripTagline = () => {
+    if (planId === 'japan-2025') 
+      return "Yoki's birthday bash in the land of cherry blossoms";
+    if (planId === 'iceland-2026')
+      return "Northern lights and epic landscapes";
+    return "Your adventure awaits";
+  };
   
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({...plan});
@@ -28,21 +44,16 @@ function PlanPage() {
   };
 
   return (
-    <div className="plan-page">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="fw-bold">{plan.title}</h2>
-        <div>
-          <button 
-            className="btn btn-outline-info" 
-            onClick={() => setIsEditing(!isEditing)}
-          >
-            {isEditing ? 'Cancel' : 'Edit Plan'}
-          </button>
-        </div>
+    <div className="plan-page text-center">
+      <div className="d-flex justify-content-center align-items-center mb-4 flex-column">
+        <h2 className="trip-title">
+          {getTripFlag()} {plan.title}
+        </h2>
+        <p className="trip-tagline">{getTripTagline()}</p>
       </div>
       
       {isEditing ? (
-        <div className="card bg-dark mb-4">
+        <div className="card bg-dark mb-4 mx-auto" style={{ maxWidth: '900px' }}>
           <div className="card-body">
             <div className="row g-3">
               <div className="col-md-6">
@@ -120,7 +131,7 @@ function PlanPage() {
               </div>
             </div>
             
-            <div className="d-flex justify-content-end mt-3">
+            <div className="d-flex justify-content-center mt-3">
               <button 
                 onClick={() => setIsEditing(false)} 
                 className="btn btn-secondary me-2"
@@ -137,14 +148,14 @@ function PlanPage() {
           </div>
         </div>
       ) : (
-        <div className="row">
-          <div className="col-md-6 mb-4">
+        <div className="row justify-content-center">
+          <div className="col-md-8 mb-4">
             {plan.image && (
               <img 
                 src={plan.image} 
                 alt={plan.title}
-                className="img-fluid rounded"
-                style={{ maxHeight: '300px', width: '100%', objectFit: 'cover' }}
+                className="img-fluid rounded hero-image"
+                style={{ objectFit: 'cover' }}
                 onError={(e) => {
                   e.target.onerror = null;
                   e.target.src = 'https://placehold.co/600x300/222/666?text=Plan+Image';
@@ -152,33 +163,11 @@ function PlanPage() {
               />
             )}
           </div>
-          <div className="col-md-6">
-            <div className="card h-100">
-              <div className="card-body">
-                <h3 className="card-title">{plan.title}</h3>
-                <p className="card-text">{plan.description}</p>
-                
-                <div className="mt-4">
-                  {(plan.startDate || plan.endDate) && (
-                    <p>
-                      <strong>Dates:</strong> {plan.startDate || 'Not set'} to {plan.endDate || 'Not set'}
-                    </p>
-                  )}
-                  
-                  {plan.budget && (
-                    <p>
-                      <strong>Budget:</strong> ${plan.budget}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
           
           {plan.notes && (
-            <div className="col-12 mt-4">
+            <div className="col-md-8 mt-4">
               <div className="card">
-                <div className="card-body">
+                <div className="card-body text-center">
                   <h4 className="card-title">Notes</h4>
                   <p className="card-text" style={{ whiteSpace: 'pre-line' }}>{plan.notes}</p>
                 </div>
@@ -187,26 +176,41 @@ function PlanPage() {
           )}
           
           {/* Large thumbnail cards for Planning and Wishlist */}
-          <div className="col-12 mt-4">
-            <div className="row g-4">
-              <div className="col-md-6">
+          <div className="col-md-10 mt-4">
+            <div className="divider mb-4">
+              <span>Your Trip Tools</span>
+            </div>
+            
+            <div className="row g-4 justify-content-center">
+              <div className="col-12 col-sm-8 col-md-4">
                 <Link to={`/plan/${planId}/planning`} className="text-decoration-none">
-                  <div className="card feature-card planning-card">
-                    <div className="card-body text-center py-5">
-                      <div className="feature-icon mb-3">📋</div>
-                      <h3 className="card-title">Planning</h3>
-                      <p className="card-text">Organize your trip day by day and add activities</p>
+                  <div className="card feature-card planning-card primary-feature">
+                    <div className="card-body text-center py-4">
+                      <div className="feature-icon mb-2">📋</div>
+                      <h3 className="card-title feature-title">Planning</h3>
+                      <p className="card-text feature-text">Organize your trip day by day and add activities</p>
                     </div>
                   </div>
                 </Link>
               </div>
-              <div className="col-md-6">
+              <div className="col-12 col-sm-8 col-md-4">
+                <Link to={`/plan/${planId}/bookings`} className="text-decoration-none">
+                  <div className="card feature-card bookings-card">
+                    <div className="card-body text-center py-4">
+                      <div className="feature-icon mb-2">🎫</div>
+                      <h3 className="card-title feature-title">Bookings</h3>
+                      <p className="card-text feature-text">Track flights, hotels, and reservations</p>
+                    </div>
+                  </div>
+                </Link>
+              </div>
+              <div className="col-12 col-sm-8 col-md-4">
                 <Link to={`/plan/${planId}/wishlist`} className="text-decoration-none">
                   <div className="card feature-card wishlist-card">
-                    <div className="card-body text-center py-5">
-                      <div className="feature-icon mb-3">✨</div>
-                      <h3 className="card-title">Wishlist</h3>
-                      <p className="card-text">Save ideas and places you want to visit</p>
+                    <div className="card-body text-center py-4">
+                      <div className="feature-icon mb-2">✨</div>
+                      <h3 className="card-title feature-title">Wishlist</h3>
+                      <p className="card-text feature-text">Save ideas and places you want to visit</p>
                     </div>
                   </div>
                 </Link>
@@ -218,20 +222,30 @@ function PlanPage() {
       
       <style jsx>{`
         .feature-card {
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
+          transition: all 0.3s ease;
           border-width: 2px;
           height: 100%;
           cursor: pointer;
+          max-width: 400px;
+          margin: 0 auto;
+          position: relative;
+          overflow: hidden;
         }
         
         .feature-card:hover {
-          transform: translateY(-10px);
+          transform: translateY(-8px) scale(1.03);
           box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
         }
         
         .planning-card {
           background-color: #2c3e50;
           border-color: #3498db;
+          color: white;
+        }
+        
+        .bookings-card {
+          background-color: #2c3e50;
+          border-color: #16a34a;
           color: white;
         }
         
@@ -242,7 +256,122 @@ function PlanPage() {
         }
         
         .feature-icon {
-          font-size: 3rem;
+          font-size: 2.5rem;
+        }
+        
+        .feature-title {
+          font-size: 1.5rem;
+        }
+        
+        .feature-text {
+          font-size: 0.9rem;
+        }
+        
+        .primary-feature {
+          box-shadow: 0 8px 16px rgba(52, 152, 219, 0.3);
+          transform: translateY(-5px);
+          border-width: 3px;
+        }
+        
+        .primary-feature:hover {
+          transform: translateY(-12px) scale(1.05);
+          box-shadow: 0 20px 30px rgba(52, 152, 219, 0.4);
+        }
+        
+        .primary-feature::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(45deg, transparent 65%, rgba(52, 152, 219, 0.3) 100%);
+          pointer-events: none;
+        }
+        
+        .divider {
+          position: relative;
+          text-align: center;
+          font-family: 'Inter', sans-serif;
+          color: #94a3b8;
+          font-size: 0.9rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          margin-bottom: 2rem;
+        }
+        
+        .divider::before,
+        .divider::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          width: 35%;
+          height: 1px;
+          background-color: rgba(148, 163, 184, 0.3);
+        }
+        
+        .divider::before {
+          left: 0;
+        }
+        
+        .divider::after {
+          right: 0;
+        }
+        
+        .divider span {
+          background-color: #242424;
+          padding: 0 15px;
+          position: relative;
+        }
+        
+        .trip-title {
+          font-family: 'Inter', sans-serif;
+          font-size: 2.5rem;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: #f8fafc;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .trip-tagline {
+          font-family: 'Inter', sans-serif;
+          font-size: 1.1rem;
+          font-weight: 400;
+          font-style: italic;
+          color: #94a3b8;
+          margin-bottom: 1.5rem;
+          max-width: 500px;
+        }
+        
+        .hero-image {
+          width: 100%;
+          height: auto;
+          max-height: 400px;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 767px) {
+          .trip-title {
+            font-size: 2rem;
+          }
+          
+          .trip-tagline {
+            font-size: 1rem;
+            max-width: 90%;
+          }
+          
+          .divider::before,
+          .divider::after {
+            width: 25%;
+          }
+          
+          .feature-icon {
+            font-size: 2rem;
+          }
+          
+          .feature-title {
+            font-size: 1.25rem;
+          }
         }
       `}</style>
     </div>

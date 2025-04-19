@@ -19,6 +19,9 @@ function PlanWishlistPage() {
             <Link to={`/plan/${planId}`} className="btn btn-sm btn-outline-secondary me-2">
               Overview
             </Link>
+            <Link to={`/plan/${planId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
+              Bookings
+            </Link>
             <Link to={`/plan/${planId}/planning`} className="btn btn-sm btn-outline-secondary">
               Planning
             </Link>

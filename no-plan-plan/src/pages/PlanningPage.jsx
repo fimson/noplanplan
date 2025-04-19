@@ -63,6 +63,7 @@ function PlanningPage() {
   };
 
   const [activities, setActivities] = useState(getInitialActivities());
+  const [bookings, setBookings] = useState([]);
 
   const [newActivity, setNewActivity] = useState({
     day: 1,
@@ -101,6 +102,70 @@ function PlanningPage() {
       }
     }
   }, [planId]);
+  
+  // Load bookings from localStorage
+  useEffect(() => {
+    try {
+      const storageKey = `bookings-${planId}`;
+      const storedBookings = localStorage.getItem(storageKey);
+      if (storedBookings) {
+        setBookings(JSON.parse(storedBookings));
+      } else {
+        // Set default bookings if none exist
+        setBookings(getInitialBookings());
+      }
+    } catch (error) {
+      console.error("Error loading bookings from localStorage:", error);
+      setBookings(getInitialBookings());
+    }
+  }, [planId]);
+
+  // Initialize with sample booking data based on the plan
+  const getInitialBookings = () => {
+    if (planId === 'japan-2025') {
+      return [
+        {
+          id: 1,
+          name: 'Flight to Tokyo',
+          date: '2025-06-26',
+          link: 'https://www.example.com/flights',
+          notes: 'Japan Airlines, JL123'
+        },
+        {
+          id: 2,
+          name: 'Hotel in Tokyo',
+          date: '2025-06-26',
+          link: 'https://www.example.com/hotels',
+          notes: 'Check-in: 3PM'
+        },
+        {
+          id: 3,
+          name: 'Train to Kyoto',
+          date: '2025-07-02',
+          link: 'https://www.japan-guide.com/e/e2361.html',
+          notes: 'Shinkansen, reserved seats'
+        }
+      ];
+    } else if (planId === 'iceland-2026') {
+      return [
+        {
+          id: 1,
+          name: 'Flight to Reykjavik',
+          date: '2026-07-15',
+          link: 'https://www.example.com/flights',
+          notes: 'Icelandair, FI614'
+        },
+        {
+          id: 2,
+          name: 'Rental Car',
+          date: '2026-07-15',
+          link: 'https://www.example.com/cars',
+          notes: '4x4 SUV for the entire trip'
+        }
+      ];
+    }
+    return [];
+  };
   
   // Save activities to localStorage whenever they change
   useEffect(() => {
@@ -158,6 +223,51 @@ function PlanningPage() {
       date.setDate(date.getDate() + day - 1);
       return { day, date };
     });
+  };
+  
+  // Get calendar days with padding to start from Monday
+  const getCalendarDays = () => {
+    const daysData = getDaysWithDates();
+    if (!daysData.length || !daysData[0].date) return daysData;
+
+    const result = [];
+    const firstDate = new Date(daysData[0].date);
+    
+    // Get the day of the week for the first date (0 = Sunday, 1 = Monday, etc.)
+    // Convert to Monday-based index (0 = Monday, 6 = Sunday)
+    const firstDayOfWeek = (firstDate.getDay() + 6) % 7;
+    
+    // Add empty placeholder days at the beginning to align with Monday
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      const placeholderDate = new Date(firstDate);
+      placeholderDate.setDate(placeholderDate.getDate() - (firstDayOfWeek - i));
+      result.push({
+        day: null,
+        date: placeholderDate,
+        isPlaceholder: true
+      });
+    }
+    
+    // Add the actual days
+    result.push(...daysData);
+    
+    // Add empty placeholder days at the end to complete the week
+    const lastDate = new Date(daysData[daysData.length - 1].date);
+    const lastDayOfWeek = (lastDate.getDay() + 6) % 7;
+    
+    if (lastDayOfWeek < 6) {
+      for (let i = 1; i <= 6 - lastDayOfWeek; i++) {
+        const placeholderDate = new Date(lastDate);
+        placeholderDate.setDate(placeholderDate.getDate() + i);
+        result.push({
+          day: null,
+          date: placeholderDate,
+          isPlaceholder: true
+        });
+      }
+    }
+    
+    return result;
   };
   
   // Format date in a readable way
@@ -336,6 +446,65 @@ function PlanningPage() {
     return dayData ? dayData.date : null;
   };
   
+  // Get bookings for a specific day
+  const getBookingsForDay = (date) => {
+    if (!date) return [];
+    const dateString = new Date(date).toISOString().split('T')[0];
+    return bookings.filter(booking => booking.date === dateString);
+  };
+
+  // Convert booking to an activity-like object for display
+  const renderBookingAsActivity = (booking) => {
+    return {
+      id: `booking-${booking.id}`,
+      title: booking.name,
+      isBooking: true,
+      description: booking.notes || '',
+      link: booking.link || '',
+    };
+  };
+  
+  // Get icon for booking or activity based on name
+  const getActivityIcon = (name, isBooking = false) => {
+    if (!name) return isBooking ? '🎫' : '📍';
+    
+    const lowerName = name.toLowerCase();
+    
+    if (lowerName.includes('flight') || lowerName.includes('plane') || lowerName.includes('air')) {
+      return '✈️';
+    } else if (lowerName.includes('train') || lowerName.includes('rail') || lowerName.includes('shinkansen')) {
+      return '🚄';
+    } else if (lowerName.includes('hotel') || lowerName.includes('stay') || lowerName.includes('accommodation') || lowerName.includes('check-in')) {
+      return '🏨';
+    } else if (lowerName.includes('tour') || lowerName.includes('guide') || lowerName.includes('excursion')) {
+      return '🗺️';
+    } else if (lowerName.includes('dinner') || lowerName.includes('lunch') || lowerName.includes('restaurant') || lowerName.includes('food')) {
+      return '🍣';
+    } else if (lowerName.includes('car') || lowerName.includes('rental') || lowerName.includes('drive')) {
+      return '🚗';
+    } else if (lowerName.includes('museum') || lowerName.includes('exhibition') || lowerName.includes('gallery')) {
+      return '🏛️';
+    } else if (lowerName.includes('show') || lowerName.includes('concert') || lowerName.includes('performance')) {
+      return '🎭';
+    } else if (lowerName.includes('ferry') || lowerName.includes('boat') || lowerName.includes('cruise')) {
+      return '⛴️';
+    } else if (lowerName.includes('temple') || lowerName.includes('shrine') || lowerName.includes('castle')) {
+      return '🏯';
+    } else if (lowerName.includes('park') || lowerName.includes('garden') || lowerName.includes('nature')) {
+      return '🌳';
+    } else if (lowerName.includes('shopping') || lowerName.includes('market') || lowerName.includes('store')) {
+      return '🛍️';
+    } else if (lowerName.includes('beach') || lowerName.includes('swim') || lowerName.includes('ocean')) {
+      return '🏖️';
+    } else if (lowerName.includes('arrival') || lowerName.includes('arrival')) {
+      return '🛬';
+    } else if (lowerName.includes('departure') || lowerName.includes('leaving')) {
+      return '🛫';
+    } else {
+      return isBooking ? '🎫' : '📍';
+    }
+  };
+  
   return (
     <div className="planning-page">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -344,6 +513,9 @@ function PlanningPage() {
           <div className="mt-2">
             <Link to={`/plan/${planId}`} className="btn btn-sm btn-outline-secondary me-2">
               Overview
+            </Link>
+            <Link to={`/plan/${planId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
+              Bookings
             </Link>
             <Link to={`/plan/${planId}/wishlist`} className="btn btn-sm btn-outline-secondary">
               Wishlist
@@ -416,14 +588,22 @@ function PlanningPage() {
       
       {/* Trip dates info */}
       {(planDetails.startDate || planDetails.endDate) && (
-        <div className="alert alert-info mb-4">
-          <strong>Trip Dates:</strong> {planDetails.startDate ? new Date(planDetails.startDate).toLocaleDateString() : 'Not set'} 
-          to {planDetails.endDate ? new Date(planDetails.endDate).toLocaleDateString() : 'Not set'}
-          {planDetails.startDate && planDetails.endDate && (
-            <span className="ms-2">
-              ({getDaysArray().length} days)
-            </span>
-          )}
+        <div className="alert alert-info mb-4 trip-dates-container">
+          <div className="d-flex align-items-center">
+            <span className="trip-dates-icon me-2">📅</span>
+            <div>
+              <strong className="trip-dates-label">Trip Dates: </strong>
+              <span className="trip-dates-value"> 
+                {planDetails.startDate ? new Date(planDetails.startDate).toLocaleDateString() : 'Not set'} 
+                {planDetails.endDate ? ' to ' + new Date(planDetails.endDate).toLocaleDateString() : ''}
+              </span>
+              {planDetails.startDate && planDetails.endDate && (
+                <span className="trip-duration-badge ms-2">
+                  {getDaysArray().length} days
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
       
@@ -521,103 +701,139 @@ function PlanningPage() {
       {daysWithDates.length > 0 ? (
         <div>
           <h3 className="mb-4">Trip Days</h3>
-          <div className="row g-4">
-            {daysWithDates.map(({ day, date }) => {
-              const dayActivities = getActivitiesForDay(day);
-              const hasActivities = dayActivities.length > 0;
-              const firstActivity = hasActivities ? dayActivities[0] : null;
-              
-              return (
-                <div key={day} className="col-lg-3 col-md-6 col-12">
-                  <div className="card h-100">
-                    <div className="card-header d-flex justify-content-between align-items-center">
-                      <h5 className="mb-0">Day {day}</h5>
-                      {date && <span className="date-badge">{formatDate(date)}</span>}
-                    </div>
-                    
-                    <div className="card-body">
-                      {hasActivities ? (
-                        <>
-                          <h6 className="card-subtitle text-truncate mb-2">
-                            {dayActivities.length} {dayActivities.length === 1 ? 'Activity' : 'Activities'}
-                          </h6>
-                          
-                          <div className="activity-summary">
-                            <p className="card-text activity-title">
-                              <strong>{firstActivity.title}</strong>
-                              {firstActivity.startTime && (
-                                <span className="badge bg-secondary ms-2">
-                                  {firstActivity.startTime}
-                                </span>
-                              )}
-                            </p>
-                            
-                            {firstActivity.location && (
-                              <p className="card-text text-info mb-1">
-                                <small>📍 {firstActivity.location}</small>
-                              </p>
+          <div className="calendar-container">
+            <div className="calendar-grid">
+              {getCalendarDays().map((dayData, index) => {
+                // Handle placeholder days - just render empty transparent div to maintain grid
+                if (dayData.isPlaceholder) {
+                  return <div key={`placeholder-${index}`} className="calendar-day placeholder"></div>;
+                }
+                
+                const { day, date } = dayData;
+                const dayActivities = getActivitiesForDay(day);
+                const hasActivities = dayActivities.length > 0;
+                const firstActivity = hasActivities ? dayActivities[0] : null;
+                
+                // Determine if it's a weekend (5=Saturday, 6=Sunday in our 0-based index starting from Monday)
+                const isWeekend = index % 7 === 5 || index % 7 === 6;
+                
+                return (
+                  <div key={`day-${day}`} className={`calendar-day ${isWeekend ? 'weekend' : ''}`}>
+                    <div className="card h-100">
+                      <div className="card-header d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0 day-title">Day {day}</h5>
+                        {date && (
+                          <div className="d-flex flex-column align-items-end">
+                            <span className="day-name">{date ? new Date(date).toLocaleDateString(undefined, {weekday: 'short'}) : ''}</span>
+                            <span className="date-badge">{formatDate(date)}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="card-body d-flex flex-column">
+                        {/* Show at least one section or empty state */}
+                        {hasActivities || (date && getBookingsForDay(date).length > 0) ? (
+                          <div className="day-content">
+                            {/* Activities section */}
+                            {hasActivities && (
+                              <div className="activities-section mb-3">
+                                <h6 className="section-label">
+                                  <span className="activity-icon">📋</span> Activities
+                                </h6>
+                                
+                                <div className="activity-item">
+                                  <p className="card-text activity-title">
+                                    <span className="activity-icon me-1">{getActivityIcon(firstActivity.title)}</span>
+                                    <strong>{firstActivity.title}</strong>
+                                    {firstActivity.startTime && (
+                                      <span className="badge bg-secondary ms-2">
+                                        {firstActivity.startTime}
+                                      </span>
+                                    )}
+                                  </p>
+                                  
+                                  {firstActivity.location && (
+                                    <p className="card-text text-info mb-1">
+                                      <small>📍 {firstActivity.location}</small>
+                                    </p>
+                                  )}
+                                  
+                                  {dayActivities.length > 1 && (
+                                    <p className="text-muted mt-1 mb-0">
+                                      <small>+ {dayActivities.length - 1} more {dayActivities.length - 1 === 1 ? 'activity' : 'activities'}</small>
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                             )}
                             
-                            {dayActivities.length > 1 && (
-                              <p className="text-muted mt-2">
-                                <small>+ {dayActivities.length - 1} more {dayActivities.length - 1 === 1 ? 'activity' : 'activities'}</small>
-                              </p>
+                            {/* Bookings section */}
+                            {date && getBookingsForDay(date).length > 0 && (
+                              <div className="bookings-section">
+                                <h6 className="section-label">
+                                  <span className="booking-icon">🎫</span> Bookings
+                                </h6>
+                                
+                                <div className="booking-item">
+                                  <p className="card-text booking-title">
+                                    <span className="booking-icon me-1">{getActivityIcon(getBookingsForDay(date)[0].name, true)}</span>
+                                    <strong>{getBookingsForDay(date)[0].name}</strong>
+                                  </p>
+                                  
+                                  {getBookingsForDay(date).length > 1 && (
+                                    <p className="text-muted mt-1 mb-0">
+                                      <small>+ {getBookingsForDay(date).length - 1} more booking{getBookingsForDay(date).length - 1 !== 1 ? 's' : ''}</small>
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </>
-                      ) : (
-                        <p className="card-text text-center text-muted">
-                          No activities planned
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="card-footer">
-                      <div className="d-flex gap-2 justify-content-between">
-                        <div className="dropdown dropup">
-                          <button
-                            className="btn btn-sm btn-outline-primary dropdown-toggle"
-                            type="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                          >
-                            Add Activity
-                          </button>
-                          <ul className="dropdown-menu">
-                            <li>
-                              <button
-                                className="dropdown-item"
-                                onClick={() => {
-                                  setNewActivity({...newActivity, day});
-                                  setShowForm(true);
-                                }}
-                              >
-                                Create New
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                className="dropdown-item"
-                                onClick={() => handleAddFromWishlistToDay(day)}
-                              >
-                                From Wishlist
-                              </button>
-                            </li>
-                          </ul>
-                        </div>
+                        ) : (
+                          <div className="empty-state text-center text-muted">
+                            <p className="card-text mb-0">No activities planned</p>
+                          </div>
+                        )}
                         
-                        <button 
-                          className="btn btn-sm btn-outline-info"
-                          onClick={() => openDayModal(day)}
-                        >
-                          View Details
-                        </button>
+                        {/* Spacer to push footer to bottom */}
+                        <div className="flex-grow-1"></div>
+                      </div>
+                      
+                      <div className="card-footer">
+                        <div className="action-buttons">
+                          <button
+                            className="btn btn-sm btn-icon"
+                            title="Add Activity"
+                            onClick={() => {
+                              setNewActivity({...newActivity, day});
+                              setShowForm(true);
+                            }}
+                          >
+                            <span className="icon">➕</span>
+                          </button>
+                          
+                          <button 
+                            className="btn btn-sm btn-icon"
+                            title="Add from Wishlist"
+                            onClick={() => handleAddFromWishlistToDay(day)}
+                          >
+                            <span className="icon">⭐</span>
+                          </button>
+                          
+                          <button 
+                            className="btn btn-sm btn-icon"
+                            title="View Details"
+                            onClick={() => openDayModal(day)}
+                          >
+                            <span className="icon">🔍</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       ) : (
@@ -681,60 +897,119 @@ function PlanningPage() {
         >
           {selectedDay && (
             <>
-              {getSortedActivitiesForDay(selectedDay).length > 0 ? (
+              {getSortedActivitiesForDay(selectedDay).length > 0 || 
+               (getSelectedDayDate() && getBookingsForDay(getSelectedDayDate()).length > 0) ? (
                 <div className="timeline">
-                  {getSortedActivitiesForDay(selectedDay).map((activity) => (
-                    <div key={activity.id} className="card mb-3">
-                      <div className="card-body">
-                        <div className="d-flex justify-content-between align-items-center">
-                          <h5 className="card-title mb-0">
-                            {activity.title}
-                            {activity.wishlistItemId && (
-                              <span className="badge bg-info ms-2" title="From wishlist">
-                                <small>💭</small>
-                              </span>
+                  {/* Display bookings first */}
+                  {getSelectedDayDate() && getBookingsForDay(getSelectedDayDate()).length > 0 && (
+                    <div className="booking-section mb-3">
+                      <h6 className="section-title">
+                        <span className="booking-icon">🎫</span> Bookings for this day
+                      </h6>
+                      {getBookingsForDay(getSelectedDayDate()).map((booking) => (
+                        <div key={`booking-${booking.id}`} className="card mb-3 booking-card">
+                          <div className="card-body">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <h5 className="card-title mb-0">
+                                <span className="booking-icon me-2">{getActivityIcon(booking.name, true)}</span>
+                                {booking.name}
+                              </h5>
+                            </div>
+                            
+                            {booking.notes && (
+                              <p className="card-text mt-2">
+                                {booking.notes}
+                              </p>
                             )}
-                          </h5>
-                          <div>
-                            {activity.startTime && (
-                              <span className="badge bg-secondary me-2">
-                                {activity.startTime} - {activity.endTime || '?'}
-                              </span>
-                            )}
+                            
+                            <div className="d-flex justify-content-end mt-2">
+                              {booking.link && (
+                                <a
+                                  href={booking.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm btn-outline-info me-2"
+                                >
+                                  View Booking
+                                </a>
+                              )}
+                              <Link 
+                                to={`/plan/${planId}/bookings`}
+                                className="btn btn-sm btn-outline-secondary"
+                              >
+                                Manage Bookings
+                              </Link>
+                            </div>
                           </div>
                         </div>
-                        
-                        {activity.location && (
-                          <p className="card-text text-info mt-2 mb-1">
-                            <small>📍 {activity.location}</small>
-                          </p>
-                        )}
-                        
-                        {activity.description && (
-                          <p className="card-text mt-2">{activity.description}</p>
-                        )}
-                        
-                        <div className="d-flex justify-content-end mt-2">
-                          <button 
-                            onClick={() => handleEditActivity(activity)} 
-                            className="btn btn-sm btn-outline-secondary me-2"
-                          >
-                            Edit
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteActivity(activity.id)} 
-                            className="btn btn-sm btn-outline-danger"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  
+                  {/* Display activities */}
+                  {getSortedActivitiesForDay(selectedDay).length > 0 && (
+                    <div className="activities-section">
+                      {getSortedActivitiesForDay(selectedDay).length > 0 && getBookingsForDay(getSelectedDayDate()).length > 0 && (
+                        <h6 className="section-title">
+                          <span className="activity-icon">📋</span> Activities
+                        </h6>
+                      )}
+                      
+                      {getSortedActivitiesForDay(selectedDay).map((activity) => (
+                        <div key={activity.id} className="card mb-3">
+                          <div className="card-body">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <h5 className="card-title mb-0">
+                                <span className="activity-icon me-2">{getActivityIcon(activity.title)}</span>
+                                {activity.title}
+                                {activity.wishlistItemId && (
+                                  <span className="badge bg-info ms-2" title="From wishlist">
+                                    <small>💭</small>
+                                  </span>
+                                )}
+                              </h5>
+                              <div>
+                                {activity.startTime && (
+                                  <span className="badge bg-secondary me-2">
+                                    {activity.startTime} - {activity.endTime || '?'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {activity.location && (
+                              <p className="card-text text-info mt-2 mb-1">
+                                <small>📍 {activity.location}</small>
+                              </p>
+                            )}
+                            
+                            {activity.description && (
+                              <p className="card-text mt-2">{activity.description}</p>
+                            )}
+                            
+                            <div className="d-flex justify-content-end mt-2">
+                              <button 
+                                onClick={() => handleEditActivity(activity)} 
+                                className="btn btn-sm btn-outline-secondary me-2"
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteActivity(activity.id)} 
+                                className="btn btn-sm btn-outline-danger"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="alert alert-info text-center">
-                  No activities planned for this day.
+                  No activities or bookings for this day.
                 </div>
               )}
             </>
@@ -774,18 +1049,214 @@ function PlanningPage() {
 
       <style jsx>{`
         .date-badge {
-          font-size: 0.8rem;
-          color: #6c757d;
+          font-size: 0.75rem;
+          color: #adb5bd;
+        }
+        
+        .day-name {
+          font-size: 0.7rem;
+          font-weight: 600;
+          color: #adb5bd;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
+        .day-title {
+          font-size: 1.25rem;
+          font-weight: 600;
+        }
+        
+        .day-content {
+          width: 100%;
+        }
+        
+        .section-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #adb5bd;
+          text-transform: uppercase;
+          margin-bottom: 0.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding-bottom: 0.25rem;
+        }
+        
+        .activity-item, .booking-item {
+          padding-left: 0.5rem;
+        }
+        
+        .activities-section {
+          padding-bottom: 0.5rem;
+        }
+        
+        .activity-count {
+          font-size: 0.85rem;
+          color: #adb5bd;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding-bottom: 0.5rem;
         }
         
         .activity-title {
           display: flex;
           align-items: center;
           margin-bottom: 0.5rem;
+          font-size: 0.9rem;
+        }
+        
+        .booking-title {
+          display: flex;
+          align-items: center;
+          margin-bottom: 0.5rem;
+          font-size: 0.9rem;
+          color: #0dcaf0;
+        }
+        
+        .booking-icon {
+          font-size: 1rem;
+          color: #0dcaf0;
+        }
+        
+        .activity-icon {
+          font-size: 1rem;
+          color: #6ea8fe;
+        }
+        
+        .section-title {
+          font-size: 0.9rem;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 1rem;
+          color: #adb5bd;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding-bottom: 0.5rem;
+        }
+        
+        .booking-card {
+          border-left: 3px solid #0dcaf0;
         }
         
         .activity-summary {
           min-height: 80px;
+        }
+        
+        /* Mobile-first calendar layout */
+        .calendar-container {
+          width: 100%;
+          overflow-x: auto;
+          padding-bottom: 1rem;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+        }
+        
+        .calendar-container::-webkit-scrollbar {
+          height: 8px;
+        }
+        
+        .calendar-container::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 4px;
+        }
+        
+        .calendar-container::-webkit-scrollbar-thumb {
+          background-color: rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+        }
+        
+        .calendar-grid {
+          display: flex;
+          gap: 1rem;
+          min-width: min-content;
+          padding: 0.5rem 0.25rem;
+        }
+        
+        .calendar-day {
+          min-height: 220px;
+          width: 280px;
+          flex-shrink: 0;
+        }
+        
+        .calendar-day.placeholder {
+          display: none;
+        }
+        
+        .action-buttons {
+          display: flex;
+          justify-content: center;
+          gap: 0.5rem;
+        }
+        
+        /* Tablet and desktop layout */
+        @media (min-width: 768px) {
+          .calendar-container {
+            overflow-x: visible;
+          }
+          
+          .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            min-width: auto;
+            padding: 0;
+          }
+          
+          .calendar-day {
+            width: auto;
+          }
+          
+          .calendar-day.placeholder {
+            display: block;
+            min-height: 0;
+            visibility: hidden;
+          }
+        }
+        
+        @media (min-width: 992px) {
+          .calendar-grid {
+            grid-template-columns: repeat(7, 1fr);
+          }
+        }
+        
+        .weekend .card {
+          background-color: rgba(52, 58, 64, 0.5);
+        }
+        
+        .weekend .card-header {
+          background-color: rgba(73, 80, 87, 0.5);
+          border-bottom-color: rgba(73, 80, 87, 0.3);
+        }
+        
+        /* Icon button styling */
+        .btn-icon {
+          width: 2.2rem;
+          height: 2.2rem;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          background-color: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          transition: all 0.2s ease;
+        }
+        
+        .btn-icon:hover {
+          background-color: rgba(255, 255, 255, 0.1);
+          transform: translateY(-2px);
+        }
+        
+        .btn-icon .icon {
+          font-size: 1rem;
+        }
+        
+        .card-footer {
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          background-color: rgba(0, 0, 0, 0.1);
+        }
+        
+        .empty-state {
+          padding: 1rem 0;
+          opacity: 0.7;
         }
       `}</style>
     </div>
