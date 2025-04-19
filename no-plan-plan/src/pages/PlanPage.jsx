@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import RegionManager from '/src/components/RegionManager.jsx';
 
 function PlanPage() {
   const { planId } = useParams();
@@ -37,6 +38,14 @@ function PlanPage() {
   
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({...plan});
+  
+  // Define default regions
+  const defaultRegions = [
+    { id: 'tokyo-default', name: 'Tokyo Area', notes: 'Central Hub' },
+    { id: 'kyoto-default', name: 'Kyoto Region', notes: 'Cultural Heart' }
+  ];
+  
+  const [regions, setRegions] = useState(defaultRegions);
 
   const handleSaveChanges = () => {
     setPlan({...editForm});
@@ -216,6 +225,12 @@ function PlanPage() {
                 </Link>
               </div>
             </div>
+            
+            {/* Render RegionManager below the tools when not editing */}
+            <div className="mt-5">
+              <RegionManager regions={regions} setRegions={setRegions} planId={planId} />
+            </div>
+            
           </div>
         </div>
       )}

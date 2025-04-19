@@ -146,11 +146,20 @@ function Wishlist({ planId, onAddToPlanning }) {
   const [newItemLink, setNewItemLink] = useState('');
   const [newItemImage, setNewItemImage] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
+  const [selectedRegion, setSelectedRegion] = useState('');
   const [expandedForm, setExpandedForm] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddToPlanModal, setShowAddToPlanModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  
+  // TODO: Fetch/load regions based on planId in a real app
+  const [regions, setRegions] = useState([ 
+    // Sample regions for now - replace with actual loading mechanism
+    { id: 'tokyo', name: 'Tokyo Area' },
+    { id: 'kyoto', name: 'Kyoto Prefecture' }
+
+  ]);
   
   // Save items to localStorage whenever they change
   useEffect(() => {
@@ -160,6 +169,36 @@ function Wishlist({ planId, onAddToPlanning }) {
       console.error("Error saving to localStorage:", error);
     }
   }, [items, planId]);
+
+  // --- Simulated AI Helper Function ---
+  const enhanceWishlistItemDetails = async (title, availableRegions) => {
+    if (!title) return { correctedTitle: title, suggestedRegionId: null };
+
+    // 1. Title Correction (Basic)
+    let correctedTitle = title
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+      
+    // Simple typo fix example
+    correctedTitle = correctedTitle.replace(/\bTokio\b/gi, 'Tokyo');
+
+    // 2. Region Assignment (Basic String Matching)
+    let suggestedRegionId = null;
+    const lowerCaseTitle = correctedTitle.toLowerCase();
+    for (const region of availableRegions) {
+      if (lowerCaseTitle.includes(region.name.toLowerCase())) {
+        suggestedRegionId = region.id;
+        break; // Assign the first match
+      }
+    }
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 300)); 
+
+    return { correctedTitle, suggestedRegionId };
+  };
+  // --- End AI Helper ---
 
   const fetchMissingDetails = async (title) => {
     setIsLoading(true);
@@ -241,18 +280,30 @@ function Wishlist({ planId, onAddToPlanning }) {
     // Start loading state
     setIsLoading(true);
     
+    // --- Call AI Helper --- 
+    const { correctedTitle, suggestedRegionId } = await enhanceWishlistItemDetails(newItem, regions);
+    
+    // Auto-select region if suggested by AI and not already manually selected
+    let regionToUse = selectedRegion; // Start with manually selected region
+    if (suggestedRegionId && !selectedRegion) { 
+      regionToUse = suggestedRegionId;
+      setSelectedRegion(suggestedRegionId); // Update state to reflect in dropdown
+    }
+    // --- End AI Helper Call ---
+    
     // Generate a unique ID
-    const id = newItem.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
+    const id = correctedTitle.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(); // Use corrected title for ID
     
     let itemToAdd = { 
       id,
-      title: newItem, 
+      title: correctedTitle, // Use corrected title
       votes: 0,
       link: newItemLink.trim() || null,
       imageUrl: newItemImage.trim() || null,
       description: newItemDescription.trim() || null,
       createdAt: new Date().toISOString(),
-      planned: false
+      planned: false,
+      regionId: regionToUse || null // Use determined region ID
     };
     
     // If some fields are missing, try to fill them with our helper
@@ -261,7 +312,7 @@ function Wishlist({ planId, onAddToPlanning }) {
     if (needsCompletion && !editIndex) {
       console.log("Missing details, fetching data...");
       try {
-        const completedDetails = await fetchMissingDetails(newItem);
+        const completedDetails = await fetchMissingDetails(correctedTitle);
         
         if (completedDetails) {
           console.log("Got completed details:", completedDetails);
@@ -311,6 +362,7 @@ function Wishlist({ planId, onAddToPlanning }) {
     setNewItemImage('');
     setNewItemDescription('');
     setExpandedForm(false);
+    setSelectedRegion('');
   };
 
   const upvoteItem = (index) => {
@@ -342,6 +394,7 @@ function Wishlist({ planId, onAddToPlanning }) {
     setNewItemDescription(item.description || '');
     setExpandedForm(true);
     setEditIndex(index);
+    setSelectedRegion(item.regionId || '');
   };
 
   const cancelEdit = () => {
@@ -392,6 +445,12 @@ function Wishlist({ planId, onAddToPlanning }) {
       e.preventDefault();
       addItem();
     }
+  };
+
+  // Helper function to get region details by ID
+  const getRegionDetails = (regionId) => {
+    if (!regionId) return null;
+    return regions.find(r => r.id === regionId);
   };
 
   return (
@@ -449,6 +508,25 @@ function Wishlist({ planId, onAddToPlanning }) {
                 disabled={isLoading}
               />
               
+              {/* Region Selection Dropdown */}
+              <div className="mb-3">
+                  <label htmlFor="regionSelect" className="form-label" style={{ fontSize: '0.85rem' }}>Region (optional)</label>
+                  <select 
+                      id="regionSelect"
+                      className="form-select form-select-sm"
+                      value={selectedRegion}
+                      onChange={(e) => setSelectedRegion(e.target.value)}
+                      disabled={isLoading}
+                  >
+                      <option value="">Select Region...</option>
+                      {regions.map(region => (
+                          <option key={region.id} value={region.id}>
+                              {region.name}
+                          </option>
+                      ))}
+                  </select>
+              </div>
+              
               <div className="d-flex justify-content-end gap-2">
                 {editIndex !== null && (
                   <button 
@@ -481,45 +559,57 @@ function Wishlist({ planId, onAddToPlanning }) {
 
       {items.length > 0 ? (
         <div className="row g-4">
-          {items.map((item, index) => (
-            <div key={item.id || index} className="col-lg-3 col-md-6 col-12">
-              <div className="card h-100">
-                {item.planned && (
-                  <div className="planned-badge">
-                    <span className="badge bg-success">Planned</span>
-                  </div>
-                )}
-                
-                {item.imageUrl && (
-                  <div className="card-img-top-wrapper" style={{ height: '180px', overflow: 'hidden' }}>
-                    <img 
-                      src={item.imageUrl} 
-                      className="card-img-top"
-                      alt={item.title}
-                      style={{ objectFit: 'cover', height: '100%', width: '100%' }}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'https://placehold.co/400x300/222/666?text=Image+Error';
-                      }} 
-                    />
-                  </div>
-                )}
-                
-                <div className="card-body">
-                  <h5 className="card-title text-truncate">
-                    {item.link ? (
-                      <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-info">
-                        {item.title}
-                      </a>
-                    ) : (
-                      item.title
-                    )}
-                  </h5>
+          {items.map((item, index) => {
+            const regionDetails = getRegionDetails(item.regionId);
+            return (
+              <div key={item.id || index} className="col-lg-3 col-md-6 col-12">
+                <div className="card h-100">
+                  {item.planned && (
+                    <div className="planned-badge">
+                      <span className="badge bg-success">Planned</span>
+                    </div>
+                  )}
                   
-                  {item.description && (
-                    <p className="card-text description-text">
-                      {item.description}
-                    </p>
+                  {item.imageUrl && (
+                    <div className="card-img-top-wrapper" style={{ height: '180px', overflow: 'hidden' }}>
+                      <img 
+                        src={item.imageUrl} 
+                        className="card-img-top"
+                        alt={item.title}
+                        style={{ objectFit: 'cover', height: '100%', width: '100%' }}
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'https://placehold.co/400x300/222/666?text=Image+Error';
+                        }} 
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="card-body">
+                    <h5 className="card-title text-truncate">
+                      {item.link ? (
+                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-info">
+                          {item.title}
+                        </a>
+                      ) : (
+                        item.title
+                      )}
+                    </h5>
+                    
+                    {item.description && (
+                      <p className="card-text description-text">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Display Region Info */}
+                  {regionDetails && (
+                    <div className="region-info my-2 px-3" style={{ fontSize: '0.8rem' }}>
+                      <span className="badge bg-secondary">
+                        {regionDetails.name}
+                      </span>
+                    </div>
                   )}
                 </div>
                 
@@ -588,8 +678,8 @@ function Wishlist({ planId, onAddToPlanning }) {
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="alert alert-info text-center">
