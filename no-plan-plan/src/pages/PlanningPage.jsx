@@ -2,18 +2,20 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Wishlist from '../components/Wishlist';
 import CustomModal from '../components/CustomModal';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
+import { db } from '../firebase-config';
 
 function PlanningPage() {
-  const { planId } = useParams();
+  const { tripId } = useParams();
   
-  // Default dates for Japan trip: 26/06/2025 to 11/07/2025
+  // Default dates for trips
   const getDefaultDates = () => {
-    if (planId === 'japan-2025') {
+    if (tripId === 'japan-2025') {
       return {
         startDate: '2025-06-26',
         endDate: '2025-07-11'
       };
-    } else if (planId === 'iceland-2026') {
+    } else if (tripId === 'iceland-2026') {
       return {
         startDate: '2026-07-15',
         endDate: '2026-07-25'
@@ -28,42 +30,18 @@ function PlanningPage() {
   const defaultDates = getDefaultDates();
   
   const [planDetails, setPlanDetails] = useState({
-    id: planId,
-    title: planId === 'japan-2025' ? 'Japan Trip 2025' : 
-           planId === 'iceland-2026' ? 'Iceland 2026' : 'Travel Plan',
+    id: tripId,
+    title: tripId === 'japan-2025' ? 'Japan Trip 2025' : 
+           tripId === 'iceland-2026' ? 'Iceland 2026' : 'Travel Plan',
     startDate: defaultDates.startDate,
     endDate: defaultDates.endDate,
     budget: '',
     notes: ''
   });
 
-  // Get initial activities from localStorage or use default
-  const getInitialActivities = () => {
-    try {
-      const storageKey = `activities-${planId}`;
-      const storedActivities = localStorage.getItem(storageKey);
-      if (storedActivities) {
-        return JSON.parse(storedActivities);
-      }
-    } catch (error) {
-      console.error("Error loading initial activities from localStorage:", error);
-    }
-    
-    // Default activity if nothing in localStorage
-    return [{
-      id: 1,
-      day: 1,
-      title: 'Arrival',
-      description: 'Airport transfer and check-in to hotel',
-      startTime: '14:00',
-      endTime: '16:00',
-      location: '',
-      wishlistItemId: null
-    }];
-  };
-
-  const [activities, setActivities] = useState(getInitialActivities());
+  const [activities, setActivities] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [newActivity, setNewActivity] = useState({
     day: 1,
@@ -86,77 +64,193 @@ function PlanningPage() {
   const [selectedDay, setSelectedDay] = useState(null);
   const [showDayModal, setShowDayModal] = useState(false);
   
-  // Load activities from localStorage
+  // Fetch plan details and activities from Firestore
   useEffect(() => {
-    // Check for pending activity from wishlist
-    const pendingActivity = localStorage.getItem('pending-activity');
-    if (pendingActivity) {
+    if (!tripId) return;
+    
+    const fetchPlanData = async () => {
+      setIsLoading(true);
       try {
-        const activityData = JSON.parse(pendingActivity);
-        // Add it to our activities
-        addActivityFromWishlist(activityData);
-        // Clear it from localStorage
-        localStorage.removeItem('pending-activity');
+        // Fetch trip details
+        const tripRef = doc(db, 'trips', tripId);
+        const tripSnap = await getDoc(tripRef);
+        
+        if (tripSnap.exists()) {
+          const tripData = tripSnap.data();
+          setPlanDetails({
+            id: tripId,
+            title: tripData.title || planDetails.title,
+            description: tripData.description || '',
+            startDate: tripData.startDate || defaultDates.startDate,
+            endDate: tripData.endDate || defaultDates.endDate,
+            budget: tripData.budget || '',
+            notes: tripData.notes || ''
+          });
+          
+          setDateForm({
+            startDate: tripData.startDate || defaultDates.startDate,
+            endDate: tripData.endDate || defaultDates.endDate
+          });
+        } else {
+          // If the trip doesn't exist in Firestore yet, create it with default values
+          await setDoc(doc(db, 'trips', tripId), {
+            title: planDetails.title,
+            startDate: defaultDates.startDate,
+            endDate: defaultDates.endDate,
+            createdAt: new Date(),
+            lastUpdated: new Date()
+          });
+        }
+        
+        // Fetch activities from Firestore
+        const activitiesRef = collection(db, `trips/${tripId}/activities`);
+        const activitiesSnapshot = await getDocs(activitiesRef);
+        
+        const fetchedActivities = [];
+        activitiesSnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedActivities.push({
+            id: doc.id,
+            day: data.day || 1,
+            title: data.title,
+            description: data.description || '',
+            startTime: data.startTime || '',
+            endTime: data.endTime || '',
+            location: data.location || '',
+            wishlistItemId: data.wishlistItemId || null
+          });
+        });
+        
+        // If no activities found, create a default one
+        if (fetchedActivities.length === 0) {
+          const defaultActivity = {
+            id: `activity-${Date.now()}`,
+            day: 1,
+            title: 'Arrival',
+            description: 'Airport transfer and check-in to hotel',
+            startTime: '14:00',
+            endTime: '16:00',
+            location: '',
+            wishlistItemId: null
+          };
+          
+          // Save default activity to Firestore
+          await setDoc(doc(db, `trips/${tripId}/activities`, defaultActivity.id), {
+            day: defaultActivity.day,
+            title: defaultActivity.title,
+            description: defaultActivity.description,
+            startTime: defaultActivity.startTime,
+            endTime: defaultActivity.endTime,
+            location: defaultActivity.location,
+            wishlistItemId: defaultActivity.wishlistItemId,
+            createdAt: new Date()
+          });
+          
+          fetchedActivities.push(defaultActivity);
+        }
+        
+        setActivities(fetchedActivities);
+        
+        // Fetch bookings from Firestore
+        const bookingsRef = collection(db, `trips/${tripId}/bookings`);
+        const bookingsSnapshot = await getDocs(bookingsRef);
+        
+        const fetchedBookings = [];
+        bookingsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedBookings.push({
+            id: doc.id,
+            name: data.name,
+            date: data.date || '',
+            link: data.link || '',
+            notes: data.notes || ''
+          });
+        });
+        
+        // If no bookings found, create default bookings based on the trip
+        if (fetchedBookings.length === 0) {
+          const defaultBookings = getInitialBookings();
+          
+          // Save default bookings to Firestore
+          for (const booking of defaultBookings) {
+            await setDoc(doc(db, `trips/${tripId}/bookings`, booking.id.toString()), {
+              name: booking.name,
+              date: booking.date,
+              link: booking.link || '',
+              notes: booking.notes || '',
+              createdAt: new Date()
+            });
+          }
+          
+          setBookings(defaultBookings);
+        } else {
+          setBookings(fetchedBookings);
+        }
       } catch (error) {
-        console.error("Error processing pending activity:", error);
+        console.error("Error fetching plan data from Firestore:", error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [planId]);
-  
-  // Load bookings from localStorage
-  useEffect(() => {
-    try {
-      const storageKey = `bookings-${planId}`;
-      const storedBookings = localStorage.getItem(storageKey);
-      if (storedBookings) {
-        setBookings(JSON.parse(storedBookings));
-      } else {
-        // Set default bookings if none exist
-        setBookings(getInitialBookings());
+    };
+    
+    // Check for pending activity from wishlist (still handle this through localStorage)
+    const checkPendingActivity = () => {
+      const pendingActivity = localStorage.getItem('pending-activity');
+      if (pendingActivity) {
+        try {
+          const activityData = JSON.parse(pendingActivity);
+          // Add it to our activities
+          addActivityFromWishlist(activityData);
+          // Clear it from localStorage
+          localStorage.removeItem('pending-activity');
+        } catch (error) {
+          console.error("Error processing pending activity:", error);
+        }
       }
-    } catch (error) {
-      console.error("Error loading bookings from localStorage:", error);
-      setBookings(getInitialBookings());
-    }
-  }, [planId]);
+    };
+    
+    fetchPlanData().then(() => {
+      checkPendingActivity();
+    });
+  }, [tripId]);
 
   // Initialize with sample booking data based on the plan
   const getInitialBookings = () => {
-    if (planId === 'japan-2025') {
+    if (tripId === 'japan-2025') {
       return [
         {
-          id: 1,
+          id: 'booking-1',
           name: 'Flight to Tokyo',
           date: '2025-06-26',
           link: 'https://www.example.com/flights',
           notes: 'Japan Airlines, JL123'
         },
         {
-          id: 2,
+          id: 'booking-2',
           name: 'Hotel in Tokyo',
           date: '2025-06-26',
           link: 'https://www.example.com/hotels',
           notes: 'Check-in: 3PM'
         },
         {
-          id: 3,
+          id: 'booking-3',
           name: 'Train to Kyoto',
           date: '2025-07-02',
           link: 'https://www.japan-guide.com/e/e2361.html',
           notes: 'Shinkansen, reserved seats'
         }
       ];
-    } else if (planId === 'iceland-2026') {
+    } else if (tripId === 'iceland-2026') {
       return [
         {
-          id: 1,
+          id: 'booking-1',
           name: 'Flight to Reykjavik',
           date: '2026-07-15',
           link: 'https://www.example.com/flights',
           notes: 'Icelandair, FI614'
         },
         {
-          id: 2,
+          id: 'booking-2',
           name: 'Rental Car',
           date: '2026-07-15',
           link: 'https://www.example.com/cars',
@@ -169,13 +263,13 @@ function PlanningPage() {
   
   // Save activities to localStorage whenever they change
   useEffect(() => {
-    const storageKey = `activities-${planId}`;
+    const storageKey = `activities-${tripId}`;
     try {
       localStorage.setItem(storageKey, JSON.stringify(activities));
     } catch (error) {
       console.error("Error saving activities to localStorage:", error);
     }
-  }, [activities, planId]);
+  }, [activities, tripId]);
   
   // Calculate days array based on start and end dates
   const getDaysArray = () => {
@@ -278,7 +372,7 @@ function PlanningPage() {
     return new Date(date).toLocaleDateString(undefined, options);
   };
   
-  const handleSaveDates = () => {
+  const handleSaveDates = async () => {
     // Validate end date is not before start date
     if (dateForm.startDate && dateForm.endDate && 
         new Date(dateForm.endDate) < new Date(dateForm.startDate)) {
@@ -286,73 +380,130 @@ function PlanningPage() {
       return;
     }
     
-    setPlanDetails({
-      ...planDetails,
-      startDate: dateForm.startDate,
-      endDate: dateForm.endDate
-    });
-    
-    setShowDateConfig(false);
+    try {
+      // Update trip dates in Firestore
+      await updateDoc(doc(db, 'trips', tripId), {
+        startDate: dateForm.startDate,
+        endDate: dateForm.endDate,
+        lastUpdated: new Date()
+      });
+      
+      // Update local state
+      setPlanDetails({
+        ...planDetails,
+        startDate: dateForm.startDate,
+        endDate: dateForm.endDate
+      });
+      
+      setShowDateConfig(false);
+    } catch (error) {
+      console.error("Error updating dates in Firestore:", error);
+      alert("Failed to save dates. Please try again.");
+    }
   };
 
-  const handleAddActivity = () => {
-    if (!newActivity.title.trim()) return;
+  const handleAddActivity = async () => {
+    if (!newActivity.title.trim() || !tripId) return;
     
-    if (editingId) {
-      // Update existing activity
-      setActivities(activities.map(act => 
-        act.id === editingId ? { ...newActivity, id: editingId } : act
-      ));
-      setEditingId(null);
-    } else {
-      // Add new activity
-      const id = Date.now();
-      setActivities([...activities, { ...newActivity, id }]);
+    try {
+      if (editingId) {
+        // Update existing activity in Firestore
+        await updateDoc(doc(db, `trips/${tripId}/activities`, editingId), {
+          day: newActivity.day,
+          title: newActivity.title,
+          description: newActivity.description,
+          startTime: newActivity.startTime,
+          endTime: newActivity.endTime,
+          location: newActivity.location,
+          wishlistItemId: newActivity.wishlistItemId,
+          lastUpdated: new Date()
+        });
+        
+        // Update local state
+        setActivities(activities.map(act => 
+          act.id === editingId ? { ...newActivity, id: editingId } : act
+        ));
+        setEditingId(null);
+      } else {
+        // Create new activity ID
+        const newId = `activity-${Date.now()}`;
+        
+        // Add new activity to Firestore
+        await setDoc(doc(db, `trips/${tripId}/activities`, newId), {
+          day: newActivity.day,
+          title: newActivity.title,
+          description: newActivity.description,
+          startTime: newActivity.startTime,
+          endTime: newActivity.endTime,
+          location: newActivity.location,
+          wishlistItemId: newActivity.wishlistItemId,
+          createdAt: new Date()
+        });
+        
+        // Add to local state
+        setActivities([...activities, { ...newActivity, id: newId }]);
+      }
+      
+      // Reset form
+      setNewActivity({
+        day: 1,
+        title: '',
+        description: '',
+        startTime: '',
+        endTime: '',
+        location: '',
+        wishlistItemId: null
+      });
+      setShowForm(false);
+    } catch (error) {
+      console.error("Error saving activity to Firestore:", error);
+      alert("Failed to save activity. Please try again.");
     }
-    
-    // Reset form
-    setNewActivity({
-      day: 1,
-      title: '',
-      description: '',
-      startTime: '',
-      endTime: '',
-      location: '',
-      wishlistItemId: null
-    });
-    setShowForm(false);
   };
   
   // Add activity from wishlist
-  const addActivityFromWishlist = (activityData) => {
-    const newAct = {
-      id: Date.now(),
-      day: activityData.day || 1,
-      title: activityData.title,
-      description: activityData.description || '',
-      startTime: '',
-      endTime: '',
-      location: activityData.location || '',
-      wishlistItemId: activityData.wishlistItemId
-    };
+  const addActivityFromWishlist = async (activityData) => {
+    if (!tripId) return;
     
-    setActivities([...activities, newAct]);
-    
-    // Update the wishlist item to mark it as planned in localStorage
-    if (activityData.wishlistItemId) {
-      try {
-        const storageKey = `wishlist-${planId}`;
-        const storedItems = localStorage.getItem(storageKey);
-        if (storedItems) {
-          const items = JSON.parse(storedItems);
-          const updatedItems = items.map(item => 
-            item.id === activityData.wishlistItemId ? {...item, planned: true} : item
-          );
-          localStorage.setItem(storageKey, JSON.stringify(updatedItems));
-        }
-      } catch (error) {
-        console.error("Error updating wishlist item:", error);
+    try {
+      const newId = `activity-${Date.now()}`;
+      const newAct = {
+        id: newId,
+        day: activityData.day || 1,
+        title: activityData.title,
+        description: activityData.description || '',
+        startTime: '',
+        endTime: '',
+        location: activityData.location || '',
+        wishlistItemId: activityData.wishlistItemId
+      };
+      
+      // Save to Firestore
+      await setDoc(doc(db, `trips/${tripId}/activities`, newId), {
+        day: newAct.day,
+        title: newAct.title,
+        description: newAct.description,
+        startTime: newAct.startTime,
+        endTime: newAct.endTime,
+        location: newAct.location,
+        wishlistItemId: newAct.wishlistItemId,
+        createdAt: new Date()
+      });
+      
+      // Update local state
+      setActivities([...activities, newAct]);
+      
+      // Mark the wishlist item as planned in Firestore
+      if (activityData.wishlistItemId) {
+        // Update the wishlist item in Firestore
+        await updateDoc(doc(db, `trips/${tripId}/wishlist`, activityData.wishlistItemId), {
+          planned: true,
+          lastUpdated: new Date()
+        });
       }
+    } catch (error) {
+      console.error("Error adding activity from wishlist to Firestore:", error);
+      alert("Failed to add activity from wishlist. Please try again.");
     }
   };
   
@@ -375,42 +526,43 @@ function PlanningPage() {
     setShowDayModal(false);
   };
 
-  const handleDeleteActivity = (id) => {
-    // Get the activity to check if it's from wishlist
-    const activity = activities.find(act => act.id === id);
+  const handleDeleteActivity = async (id) => {
+    if (!tripId) return;
     
-    // Remove from activities
-    setActivities(activities.filter(act => act.id !== id));
-    
-    // If it's from wishlist, update the wishlist item's planned status
-    if (activity && activity.wishlistItemId) {
-      // We need to update the wishlist item's planned status
-      try {
-        const storageKey = `wishlist-${planId}`;
-        const storedItems = localStorage.getItem(storageKey);
-        if (storedItems) {
-          const items = JSON.parse(storedItems);
-          // Find if there are any other activities using this wishlist item
-          const stillPlanned = activities.some(
-            act => act.id !== id && act.wishlistItemId === activity.wishlistItemId
-          );
-          
-          // If not, mark it as not planned
-          if (!stillPlanned) {
-            const updatedItems = items.map(item => 
-              item.id === activity.wishlistItemId ? {...item, planned: false} : item
-            );
-            localStorage.setItem(storageKey, JSON.stringify(updatedItems));
-          }
+    try {
+      // Get the activity to check if it's from wishlist
+      const activity = activities.find(act => act.id === id);
+      
+      // Delete from Firestore
+      await deleteDoc(doc(db, `trips/${tripId}/activities`, id));
+      
+      // Remove from local state
+      setActivities(activities.filter(act => act.id !== id));
+      
+      // If it's from wishlist, update the wishlist item's planned status
+      if (activity && activity.wishlistItemId) {
+        // Check if there are any other activities using this wishlist item
+        const stillPlanned = activities.some(
+          act => act.id !== id && act.wishlistItemId === activity.wishlistItemId
+        );
+        
+        // If not, mark it as not planned in Firestore
+        if (!stillPlanned) {
+          await updateDoc(doc(db, `trips/${tripId}/wishlist`, activity.wishlistItemId), {
+            planned: false,
+            lastUpdated: new Date()
+          });
         }
-      } catch (error) {
-        console.error("Error updating wishlist item:", error);
       }
-    }
-    
-    if (editingId === id) {
-      setEditingId(null);
-      setShowForm(false);
+      
+      // Reset editing state if needed
+      if (editingId === id) {
+        setEditingId(null);
+        setShowForm(false);
+      }
+    } catch (error) {
+      console.error("Error deleting activity from Firestore:", error);
+      alert("Failed to delete activity. Please try again.");
     }
   };
   
@@ -511,13 +663,13 @@ function PlanningPage() {
         <div>
           <h2 className="fw-bold">{planDetails.title}</h2>
           <div className="mt-2">
-            <Link to={`/plan/${planId}`} className="btn btn-sm btn-outline-secondary me-2">
+            <Link to={`/plan/${tripId}`} className="btn btn-sm btn-outline-secondary me-2">
               Overview
             </Link>
-            <Link to={`/plan/${planId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
+            <Link to={`/plan/${tripId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
               Bookings
             </Link>
-            <Link to={`/plan/${planId}/wishlist`} className="btn btn-sm btn-outline-secondary">
+            <Link to={`/plan/${tripId}/wishlist`} className="btn btn-sm btn-outline-secondary">
               Wishlist
             </Link>
           </div>
@@ -934,7 +1086,7 @@ function PlanningPage() {
                                 </a>
                               )}
                               <Link 
-                                to={`/plan/${planId}/bookings`}
+                                to={`/plan/${tripId}/bookings`}
                                 className="btn btn-sm btn-outline-secondary"
                               >
                                 Manage Bookings
@@ -1034,7 +1186,7 @@ function PlanningPage() {
           }
         >
           <Wishlist 
-            planId={planId} 
+            planId={tripId} 
             onAddToPlanning={(activityData) => {
               // Set the correct day
               activityData.day = selectedDay;

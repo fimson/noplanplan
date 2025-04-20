@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { db } from '../firebase-config';
 
 function RegionManager({ regions, setRegions, planId }) {
   const [newRegionName, setNewRegionName] = useState('');
@@ -8,41 +10,95 @@ function RegionManager({ regions, setRegions, planId }) {
   // State for inline editing
   const [editingRegionId, setEditingRegionId] = useState(null);
   const [editingRegionName, setEditingRegionName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Fetch wishlist items from Firestore
   useEffect(() => {
     if (!planId) return;
-    const wishlistKey = `wishlist-${planId}`;
-    try {
-      const storedWishlist = localStorage.getItem(wishlistKey);
-      if (storedWishlist) {
-        setWishlistItems(JSON.parse(storedWishlist));
-      } else {
+    
+    const fetchWishlistItems = async () => {
+      try {
+        const wishlistRef = collection(db, `trips/${planId}/wishlist`);
+        const querySnapshot = await getDocs(wishlistRef);
+        
+        const fetchedItems = [];
+        querySnapshot.forEach((doc) => {
+          fetchedItems.push({
+            id: doc.id,
+            ...doc.data(),
+            regionId: doc.data().regionId || null
+          });
+        });
+        
+        setWishlistItems(fetchedItems);
+      } catch (error) {
+        console.error("Error fetching wishlist items from Firestore:", error);
         setWishlistItems([]);
       }
-    } catch (error) {
-      console.error("Error loading wishlist from localStorage:", error);
-      setWishlistItems([]);
-    }
-  }, [planId]);
-
-  const handleAddRegion = (e) => {
-    e.preventDefault();
-    if (!newRegionName.trim()) return;
-
-    const newRegion = {
-      id: Date.now().toString(),
-      name: newRegionName.trim(),
-      notes: newRegionNotes.trim(),
     };
+    
+    fetchWishlistItems();
+  }, [planId, regions]); // Add regions as dependency to refresh when regions change
 
-    setRegions([...regions, newRegion]);
-
-    setNewRegionName('');
-    setNewRegionNotes('');
+  const handleAddRegion = async (e) => {
+    e.preventDefault();
+    if (!newRegionName.trim() || !planId) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const newRegion = {
+        id: `region-${Date.now()}`,
+        name: newRegionName.trim(),
+        notes: newRegionNotes.trim(),
+      };
+      
+      // Save to Firestore
+      await setDoc(doc(db, `trips/${planId}/regions`, newRegion.id), {
+        name: newRegion.name,
+        notes: newRegion.notes
+      });
+      
+      // Update local state
+      setRegions([...regions, newRegion]);
+      
+      // Reset form
+      setNewRegionName('');
+      setNewRegionNotes('');
+    } catch (error) {
+      console.error("Error adding region to Firestore:", error);
+      alert("Failed to add region. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDeleteRegion = (idToDelete) => {
-    setRegions(regions.filter(region => region.id !== idToDelete));
+  const handleDeleteRegion = async (idToDelete) => {
+    if (!planId) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, `trips/${planId}/regions`, idToDelete));
+      
+      // Update local state
+      setRegions(regions.filter(region => region.id !== idToDelete));
+      
+      // Update any wishlist items that reference this region
+      const itemsToUpdate = wishlistItems.filter(item => item.regionId === idToDelete);
+      
+      for (const item of itemsToUpdate) {
+        await updateDoc(doc(db, `trips/${planId}/wishlist`, item.id), {
+          regionId: null
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting region from Firestore:", error);
+      alert("Failed to delete region. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Handlers for inline editing
@@ -51,13 +107,31 @@ function RegionManager({ regions, setRegions, planId }) {
     setEditingRegionName(region.name);
   };
 
-  const handleSaveEdit = (regionId) => {
-    if (!editingRegionName.trim()) return; // Prevent saving empty name
-    setRegions(regions.map(region => 
-      region.id === regionId ? { ...region, name: editingRegionName.trim() } : region
-    ));
-    setEditingRegionId(null);
-    setEditingRegionName('');
+  const handleSaveEdit = async (regionId) => {
+    if (!editingRegionName.trim() || !planId) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Update in Firestore
+      await updateDoc(doc(db, `trips/${planId}/regions`, regionId), {
+        name: editingRegionName.trim()
+      });
+      
+      // Update local state
+      setRegions(regions.map(region => 
+        region.id === regionId ? { ...region, name: editingRegionName.trim() } : region
+      ));
+      
+      // Reset editing state
+      setEditingRegionId(null);
+      setEditingRegionName('');
+    } catch (error) {
+      console.error("Error updating region in Firestore:", error);
+      alert("Failed to update region. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancelEdit = () => {
@@ -126,6 +200,7 @@ function RegionManager({ regions, setRegions, planId }) {
               onChange={(e) => setNewRegionName(e.target.value)}
               placeholder="e.g., Tokyo Area"
               style={inputStyle}
+              disabled={isLoading}
               required
             />
           </div>
@@ -139,10 +214,19 @@ function RegionManager({ regions, setRegions, planId }) {
               onChange={(e) => setNewRegionNotes(e.target.value)}
               placeholder="Optional notes"
               style={inputStyle}
+              disabled={isLoading}
             />
           </div>
           <div className="col-md-2">
-            <button type="submit" className="btn btn-success btn-sm w-100">Add Region</button>
+            <button 
+              type="submit" 
+              className="btn btn-success btn-sm w-100"
+              disabled={isLoading || !newRegionName.trim()}
+            >
+              {isLoading ? (
+                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              ) : 'Add Region'}
+            </button>
           </div>
         </div>
       </form>
@@ -167,20 +251,24 @@ function RegionManager({ regions, setRegions, planId }) {
                       onChange={handleEditInputChange}
                       style={{ ...inputStyle, flexBasis: '60%' }}
                       autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(region.id)}
+                      disabled={isLoading}
+                      onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSaveEdit(region.id)}
                     />
                     <button 
                       onClick={() => handleSaveEdit(region.id)} 
                       className="btn btn-success btn-sm me-1"
                       style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
-                      disabled={!editingRegionName.trim()}
+                      disabled={isLoading || !editingRegionName.trim()}
                     >
-                      Save
+                      {isLoading ? (
+                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      ) : 'Save'}
                     </button>
                     <button 
                       onClick={handleCancelEdit} 
                       className="btn btn-secondary btn-sm"
                       style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                      disabled={isLoading}
                     >
                       Cancel
                     </button>
@@ -202,6 +290,7 @@ function RegionManager({ regions, setRegions, planId }) {
                         onClick={() => handleEditClick(region)}
                         className="btn btn-primary btn-sm me-1"
                         style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                        disabled={isLoading}
                       >
                         Edit
                       </button>
@@ -209,6 +298,7 @@ function RegionManager({ regions, setRegions, planId }) {
                         onClick={() => handleDeleteRegion(region.id)}
                         className="btn btn-danger btn-sm"
                         style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}
+                        disabled={isLoading}
                       >
                         Delete
                       </button>
@@ -223,7 +313,7 @@ function RegionManager({ regions, setRegions, planId }) {
         <p className="text-center text-muted">No regions added yet.</p>
       )}
       
-      <style jsx>{`
+      <style>{`
         .form-control:focus {
           background-color: ${inputFocusStyle.backgroundColor};
           color: ${inputFocusStyle.color};

@@ -3,11 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import Wishlist from '../components/Wishlist';
 
 function PlanWishlistPage() {
-  const { planId } = useParams();
+  const { tripId } = useParams();
   
   const [planDetails] = useState({
-    id: planId,
-    title: planId === 'japan-2025' ? 'Japan Trip 2025' : 'Travel Plan'
+    id: tripId,
+    title: tripId === 'japan-2025' ? 'Japan Trip 2025' : 'Travel Plan'
   });
 
   return (
@@ -18,20 +18,20 @@ function PlanWishlistPage() {
             So where we go?
           </h1>
           <div className="mt-2">
-            <Link to={`/plan/${planId}`} className="btn btn-sm btn-outline-secondary me-2">
+            <Link to={`/trip/${tripId}`} className="btn btn-sm btn-outline-secondary me-2">
               Overview
             </Link>
-            <Link to={`/plan/${planId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
+            <Link to={`/trip/${tripId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
               Bookings
             </Link>
-            <Link to={`/plan/${planId}/planning`} className="btn btn-sm btn-outline-secondary">
+            <Link to={`/trip/${tripId}/planning`} className="btn btn-sm btn-outline-secondary">
               Planning
             </Link>
           </div>
         </div>
       </div>
       
-      <Wishlist planId={planId} />
+      <Wishlist planId={tripId} />
     </div>
   );
 }

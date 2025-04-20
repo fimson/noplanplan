@@ -1,154 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
+import { db } from '../firebase-config';
 
 function Wishlist({ planId, onAddToPlanning }) {
   const navigate = useNavigate();
   
-  // Sample data based on planId
+  // Default sample data for new trips
   let initialItems = [];
   
-  if (planId === 'japan-2025') {
-    initialItems = [
-      {
-        id: 'nikko',
-        title: "Nikko",
-        votes: 0,
-        link: "https://www.japan-guide.com/e/e3800.html",
-        imageUrl: "https://www.2aussietravellers.com/wp-content/uploads/2018/07/Shinkyo-Bridge-in-Nikko-2.jpg",
-        description: "Shrines and waterfalls",
-        createdAt: new Date().toISOString(),
-        planned: false,
-        regionId: 'region0' // Restore sample region
-      },
-      {
-        id: 'shibuya',
-        title: "Tokyo Shibuya",
-        votes: 2,
-        link: "https://www.japan-guide.com/e/e3007.html",
-        imageUrl: "https://assets.vogue.com/photos/659db809e0e9934642099815/16:9/w_6000,h_3375,c_limit/1189690204",
-        description: "Shibuya Crossing",
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        planned: false,
-        regionId: 'region0' // Restore sample region
-      },
-      {
-        id: 'fushimi-inari',
-        title: "Fushimi Inari Shrine",
-        votes: 4,
-        link: "https://www.japan-guide.com/e/e3915.html",
-        imageUrl: "https://lh3.googleusercontent.com/gps-cs-s/AB5caB8E208ojDIa3zPw4Ssp67l66OBVM2JhONi-rz8TCWhmpSqXkXW9LpV9YA360aqB5uHU760pmg3cCX5f8ObsQQ0lbmu46bNYC2QCIRX50v0RwkHf_GHEaubZYDb2xOHB-4q2-gI=s680-w680-h510",
-        description: "Famous shrine with thousands of red torii gates in Kyoto",
-        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-        planned: false,
-        regionId: 'region1' // Restore sample region
-      },
-      {
-        id: 'kinkakuji',
-        title: "Kinkaku-ji (Golden Pavilion)",
-        votes: 1,
-        link: "https://www.japan-guide.com/e/e3908.html",
-        imageUrl: "https://www.japan-guide.com/g18/3908_top.jpg",
-        description: "Zen temple covered in gold leaf in Kyoto",
-        createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
-        planned: false,
-        regionId: 'region1' // Restore sample region
-      }
-    ];
-  } else if (planId === 'iceland-2026') {
-    initialItems = [
-      {
-        id: 'eiffel-tower',
-        title: "Eiffel Tower",
-        votes: 3,
-        link: "https://www.toureiffel.paris/en",
-        imageUrl: "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?q=80&w=1000&auto=format&fit=crop",
-        description: "Iconic iron tower in Paris",
-        createdAt: new Date().toISOString(),
-        planned: false,
-        regionId: 'region0' // Restore sample region
-      },
-      {
-        id: 'colosseum',
-        title: "Colosseum",
-        votes: 5,
-        link: "https://www.rome.net/colosseum",
-        imageUrl: "https://images.unsplash.com/photo-1552432552-06c0b0a94dda?q=80&w=1000&auto=format&fit=crop",
-        description: "Ancient Roman amphitheater",
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        planned: false,
-        regionId: 'region1' // Restore sample region
-      }
-    ];
-  } else {
-    // Default or generic items for non-specific plans
-    initialItems = [
-      {
-        id: 'default-item',
-        title: "Add your first wishlist item",
-        votes: 0,
-        link: "",
-        imageUrl: "https://images.unsplash.com/photo-1528127269322-539801943592?q=80&w=1000&auto=format&fit=crop",
-        description: "Start building your travel wishlist",
-        createdAt: new Date().toISOString(),
-        planned: false,
-        regionId: null
-      }
-    ];
-  }
-  
-  // Use stored items if available, otherwise use initialItems
-  const getLocalStorageKey = () => `wishlist-${planId || 'default'}`;
-  
-  // Try to get stored items from localStorage
-  const getStoredItems = () => {
-    try {
-      const storedItems = localStorage.getItem(getLocalStorageKey());
-      if (storedItems) {
-        // Parse stored items
-        const parsedItems = JSON.parse(storedItems);
-        
-        // Check if there are any planned items without corresponding activities
-        if (planId) {
-          const activitiesKey = `activities-${planId}`;
-          const storedActivities = localStorage.getItem(activitiesKey);
-          
-          if (storedActivities) {
-            const activities = JSON.parse(storedActivities);
-            
-            // Reset items that are marked as planned but have no corresponding activity
-            const updatedItems = parsedItems.map(item => {
-              if (item.planned) {
-                // Check if there's an activity that references this wishlist item
-                const hasActivity = activities.some(activity => 
-                  activity.wishlistItemId === item.id
-                );
-                
-                // If no activity references this item, mark it as not planned
-                if (!hasActivity) {
-                  return { ...item, planned: false };
-                }
-              }
-              return item;
-            });
-            
-            // If we made changes, update localStorage
-            if (JSON.stringify(updatedItems) !== JSON.stringify(parsedItems)) {
-              localStorage.setItem(getLocalStorageKey(), JSON.stringify(updatedItems));
-              return updatedItems;
-            }
-          }
-        }
-        
-        return parsedItems;
-      }
-      return initialItems;
-    } catch (error) {
-      console.error("Error loading from localStorage:", error);
-      return initialItems;
-    }
-  };
-  
-  const [items, setItems] = useState(getStoredItems());
+  const [items, setItems] = useState([]);
   const [newItem, setNewItem] = useState('');
   const [newItemLink, setNewItemLink] = useState('');
   const [newItemImage, setNewItemImage] = useState('');
@@ -156,36 +17,214 @@ function Wishlist({ planId, onAddToPlanning }) {
   const [selectedRegion, setSelectedRegion] = useState('');
   const [expandedForm, setExpandedForm] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start with loading state
   const [showAddToPlanModal, setShowAddToPlanModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [regions, setRegions] = useState([]);
   
-  // Load regions from localStorage based on planId
-  const [regions, setRegions] = useState(() => {
-    if (!planId) return [];
-    const regionsKey = `regions-${planId}`;
-    try {
-      const storedRegions = localStorage.getItem(regionsKey);
-      if (storedRegions) {
-          console.log(`Loaded regions for plan ${planId} from localStorage:`, JSON.parse(storedRegions));
-          return JSON.parse(storedRegions);
-      }
-      console.log(`No regions found in localStorage for plan ${planId}`);
-      return [];
-    } catch (error) {
-      console.error("Error loading regions from localStorage:", error);
-      return [];
-    }
-  });
-  
-  // Save items to localStorage whenever they change
+  // Fetch wishlist items from Firestore
   useEffect(() => {
-    try {
-      localStorage.setItem(getLocalStorageKey(), JSON.stringify(items));
-    } catch (error) {
-      console.error("Error saving to localStorage:", error);
+    if (!planId) {
+      setItems(initialItems);
+      setIsLoading(false);
+      return;
     }
-  }, [items, planId]);
+    
+    const fetchItems = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch wishlist items
+        const wishlistRef = collection(db, `trips/${planId}/wishlist`);
+        const querySnapshot = await getDocs(wishlistRef);
+        
+        const fetchedItems = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedItems.push({
+            id: doc.id,
+            title: data.title,
+            votes: data.votes || 0,
+            link: data.link || '',
+            imageUrl: data.imageUrl || '',
+            description: data.description || '',
+            createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+            planned: data.planned || false,
+            regionId: data.regionId || null
+          });
+        });
+        
+        // Sort items by createdAt date (newest first)
+        fetchedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        // If there are no items, use sample data for this trip
+        if (fetchedItems.length === 0 && planId === 'japan-2025') {
+          initialItems = [
+            {
+              id: 'nikko',
+              title: "Nikko",
+              votes: 0,
+              link: "https://www.japan-guide.com/e/e3800.html",
+              imageUrl: "https://www.2aussietravellers.com/wp-content/uploads/2018/07/Shinkyo-Bridge-in-Nikko-2.jpg",
+              description: "Shrines and waterfalls",
+              createdAt: new Date().toISOString(),
+              planned: false,
+              regionId: 'region0'
+            },
+            {
+              id: 'shibuya',
+              title: "Tokyo Shibuya",
+              votes: 2,
+              link: "https://www.japan-guide.com/e/e3007.html",
+              imageUrl: "https://assets.vogue.com/photos/659db809e0e9934642099815/16:9/w_6000,h_3375,c_limit/1189690204",
+              description: "Shibuya Crossing",
+              createdAt: new Date(Date.now() - 86400000).toISOString(),
+              planned: false,
+              regionId: 'region0'
+            }
+          ];
+          
+          // Save sample data to Firestore with error handling
+          try {
+            for (const item of initialItems) {
+              await setDoc(doc(db, `trips/${planId}/wishlist`, item.id), {
+                title: item.title,
+                votes: item.votes,
+                link: item.link,
+                imageUrl: item.imageUrl,
+                description: item.description,
+                createdAt: new Date(item.createdAt),
+                planned: item.planned,
+                regionId: item.regionId
+              });
+            }
+          } catch (saveError) {
+            console.error("Error saving sample data to Firestore:", saveError);
+            // Continue with local data despite Firestore failure
+          }
+          
+          setItems(initialItems);
+        } else if (fetchedItems.length === 0 && planId === 'iceland-2026') {
+          initialItems = [
+            {
+              id: 'eiffel-tower',
+              title: "Eiffel Tower",
+              votes: 3,
+              link: "https://www.toureiffel.paris/en",
+              imageUrl: "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?q=80&w=1000&auto=format&fit=crop",
+              description: "Iconic iron tower in Paris",
+              createdAt: new Date().toISOString(),
+              planned: false,
+              regionId: 'region0'
+            },
+            {
+              id: 'colosseum',
+              title: "Colosseum",
+              votes: 5,
+              link: "https://www.rome.net/colosseum",
+              imageUrl: "https://images.unsplash.com/photo-1552432552-06c0b0a94dda?q=80&w=1000&auto=format&fit=crop",
+              description: "Ancient Roman amphitheater",
+              createdAt: new Date(Date.now() - 86400000).toISOString(),
+              planned: false,
+              regionId: 'region1'
+            }
+          ];
+          
+          // Save sample data to Firestore with error handling
+          try {
+            for (const item of initialItems) {
+              await setDoc(doc(db, `trips/${planId}/wishlist`, item.id), {
+                title: item.title,
+                votes: item.votes,
+                link: item.link,
+                imageUrl: item.imageUrl,
+                description: item.description,
+                createdAt: new Date(item.createdAt),
+                planned: item.planned,
+                regionId: item.regionId
+              });
+            }
+          } catch (saveError) {
+            console.error("Error saving sample data to Firestore:", saveError);
+            // Continue with local data despite Firestore failure
+          }
+          
+          setItems(initialItems);
+        } else {
+          setItems(fetchedItems);
+        }
+      } catch (error) {
+        console.error("Error fetching wishlist items from Firestore:", error);
+        
+        // Fallback to localStorage if available
+        try {
+          const localData = localStorage.getItem(`wishlist-${planId}`);
+          if (localData) {
+            setItems(JSON.parse(localData));
+            console.log("Using cached wishlist data from localStorage due to Firestore error");
+          } else {
+            // If no localStorage data, use empty array or default samples
+            if (planId === 'japan-2025') {
+              setItems([
+                {
+                  id: 'nikko',
+                  title: "Nikko",
+                  votes: 0,
+                  link: "https://www.japan-guide.com/e/e3800.html",
+                  imageUrl: "https://www.2aussietravellers.com/wp-content/uploads/2018/07/Shinkyo-Bridge-in-Nikko-2.jpg",
+                  description: "Shrines and waterfalls",
+                  createdAt: new Date().toISOString(),
+                  planned: false,
+                  regionId: 'region0'
+                },
+                // Add other default items as needed
+              ]);
+            } else {
+              setItems([]);
+            }
+          }
+        } catch (localStorageError) {
+          console.error("Error accessing localStorage:", localStorageError);
+          setItems([]);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchItems();
+  }, [planId]);
+
+  // Fetch regions from Firestore
+  useEffect(() => {
+    if (!planId) {
+      setRegions([]);
+      return;
+    }
+    
+    const fetchRegions = async () => {
+      try {
+        const regionsRef = collection(db, `trips/${planId}/regions`);
+        const querySnapshot = await getDocs(regionsRef);
+        
+        const fetchedRegions = [];
+        querySnapshot.forEach((doc) => {
+          fetchedRegions.push({
+            id: doc.id,
+            name: doc.data().name,
+            notes: doc.data().notes || ''
+          });
+        });
+        
+        console.log(`Loaded ${fetchedRegions.length} regions for trip ${planId} from Firestore`);
+        setRegions(fetchedRegions);
+      } catch (error) {
+        console.error("Error fetching regions from Firestore:", error);
+        setRegions([]);
+      }
+    };
+    
+    fetchRegions();
+  }, [planId]);
 
   // Group items by region
   const getItemsByRegion = () => {
@@ -307,7 +346,7 @@ function Wishlist({ planId, onAddToPlanning }) {
 
     // --- Step 1: Call AI Function if needed --- 
     if (needsAICall) {
-      const functionUrl = "https://processwishlistitem-vsjk6mhqqq-uc.a.run.app"; // Use the actual URL
+      const functionUrl = "https://processwishlistitem-vsjk6mhqqq-uc.a.run.app";
       console.log(`Attempting AI call to: ${functionUrl}`);
       try {
         const response = await fetch(functionUrl, {
@@ -323,7 +362,6 @@ function Wishlist({ planId, onAddToPlanning }) {
         if (!response.ok) {
           const errorBody = await response.text();
           console.error("Cloud Function Error Response:", errorBody);
-          // Throw an error to be caught by the catch block
           throw new Error(`Cloud Function request failed: ${response.status} ${response.statusText}`);
         }
   
@@ -347,8 +385,6 @@ function Wishlist({ planId, onAddToPlanning }) {
             imageUrl: null,
             suggestedRegionId: null
         };
-        // Optional: Notify user the AI suggestions failed
-        // alert("Could not get AI suggestions. Please fill in details manually.");
       }
     } else {
       console.log("No AI call needed, all details provided manually.");
@@ -376,42 +412,50 @@ function Wishlist({ planId, onAddToPlanning }) {
     try {
       const id = finalTitle.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
 
-      const itemToAdd = {
-        id,
+      const itemData = {
         title: finalTitle,
         votes: 0,
-        link: finalLink,
-        imageUrl: finalImageUrl, 
-        description: finalDescription,
-        createdAt: new Date().toISOString(),
+        link: finalLink || '',
+        imageUrl: finalImageUrl || '',
+        description: finalDescription || '',
+        createdAt: new Date(),
         planned: false,
-        regionId: finalRegionId, 
+        regionId: finalRegionId || null
       };
       
-      console.log("Final item to add/update:", itemToAdd);
+      console.log("Final item to add/update:", itemData);
 
-      // Add or Update item in state
+      // Add or Update item in Firestore
       if (editIndex !== null) {
-        const updated = [...items];
-        itemToAdd.votes = updated[editIndex].votes;
-        itemToAdd.planned = updated[editIndex].planned;
-        itemToAdd.id = updated[editIndex].id; 
-        updated[editIndex] = itemToAdd;
-        setItems(updated);
+        const itemToUpdate = items[editIndex];
+        // Keep existing votes and planned status
+        itemData.votes = itemToUpdate.votes;
+        itemData.planned = itemToUpdate.planned; 
+        
+        // Update in Firestore
+        await setDoc(doc(db, `trips/${planId}/wishlist`, itemToUpdate.id), itemData, { merge: true });
+        
+        // Update local state
+        const updatedItems = [...items];
+        updatedItems[editIndex] = { ...itemData, id: itemToUpdate.id, createdAt: itemData.createdAt.toISOString() };
+        setItems(updatedItems);
         setEditIndex(null);
-        console.log("Item updated.");
+        console.log("Item updated in Firestore.");
       } else {
-        setItems([itemToAdd, ...items]);
-        console.log("Item added.");
+        // Add new item to Firestore
+        await setDoc(doc(db, `trips/${planId}/wishlist`, id), itemData);
+        
+        // Add to local state
+        const newItemWithId = { ...itemData, id, createdAt: itemData.createdAt.toISOString() };
+        setItems([newItemWithId, ...items]);
+        console.log("Item added to Firestore.");
       }
-      resetForm(); 
-
-    } catch (stateError) {
-      // Catch errors specifically related to updating state or resetting form
-      console.error("Error updating state or resetting form:", stateError);
-      alert(`Error saving item locally: ${stateError.message}`); 
+      
+      resetForm();
+    } catch (error) {
+      console.error("Error saving item to Firestore:", error);
+      alert(`Error saving item: ${error.message}`);
     } finally {
-      // This ensures loading state is always turned off
       setIsLoading(false);
       console.log("Finished addItem process.");
     }
@@ -426,28 +470,56 @@ function Wishlist({ planId, onAddToPlanning }) {
     setSelectedRegion('');
   };
 
-  const upvoteItem = (index) => {
-    const updated = [...items];
-    updated[index].votes += 1;
-    setItems(updated);
+  const upvoteItem = async (index) => {
+    if (!planId || index < 0 || index >= items.length) return;
+    
+    const item = items[index];
+    const newVotes = item.votes + 1;
+    
+    try {
+      // Update in Firestore
+      await updateDoc(doc(db, `trips/${planId}/wishlist`, item.id), {
+        votes: newVotes
+      });
+      
+      // Update local state
+      const updatedItems = [...items];
+      updatedItems[index] = { ...item, votes: newVotes };
+      setItems(updatedItems);
+    } catch (error) {
+      console.error("Error updating votes in Firestore:", error);
+    }
   };
 
-  const deleteItem = (index) => {
-    const updated = [...items];
-    updated.splice(index, 1);
-    setItems(updated);
+  const deleteItem = async (index) => {
+    if (!planId || index < 0 || index >= items.length) return;
     
-    // If deleting the item being edited, clear the form
-    if (editIndex === index) {
-      resetForm();
-      setEditIndex(null);
-    } else if (editIndex !== null && index < editIndex) {
-      // Adjust editIndex if deleting an item before it
-      setEditIndex(editIndex - 1);
+    const item = items[index];
+    
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, `trips/${planId}/wishlist`, item.id));
+      
+      // Update local state
+      const updatedItems = [...items];
+      updatedItems.splice(index, 1);
+      setItems(updatedItems);
+      
+      // Handle edit form state
+      if (editIndex === index) {
+        resetForm();
+        setEditIndex(null);
+      } else if (editIndex !== null && index < editIndex) {
+        setEditIndex(editIndex - 1);
+      }
+    } catch (error) {
+      console.error("Error deleting item from Firestore:", error);
     }
   };
 
   const editItem = (index) => {
+    if (index < 0 || index >= items.length) return;
+    
     const item = items[index];
     setNewItem(item.title);
     setNewItemLink(item.link || '');
@@ -468,37 +540,49 @@ function Wishlist({ planId, onAddToPlanning }) {
     setShowAddToPlanModal(true);
   };
   
-  const confirmAddToPlan = (day) => {
-    if (!selectedItem) return;
+  const confirmAddToPlan = async (day) => {
+    if (!selectedItem || !planId) return;
     
-    // Mark the item as planned
-    const updatedItems = items.map(item => 
-      item.id === selectedItem.id ? {...item, planned: true} : item
-    );
-    setItems(updatedItems);
-    
-    // Create an activity from this wishlist item
-    const activityData = {
-      title: selectedItem.title,
-      description: selectedItem.description,
-      location: '',
-      day: day,
-      wishlistItemId: selectedItem.id
-    };
-    
-    // Call the provided callback or navigate to planning page
-    if (onAddToPlanning) {
-      onAddToPlanning(activityData);
-    } else if (planId) {
-      // Store the activity in localStorage temporarily
-      localStorage.setItem('pending-activity', JSON.stringify(activityData));
-      // Navigate to the planning page
-      navigate(`/plan/${planId}/planning`);
+    try {
+      // Mark the item as planned in Firestore
+      await updateDoc(doc(db, `trips/${planId}/wishlist`, selectedItem.id), {
+        planned: true
+      });
+      
+      // Update local state
+      const updatedItems = items.map(item => 
+        item.id === selectedItem.id ? {...item, planned: true} : item
+      );
+      setItems(updatedItems);
+      
+      // Create an activity from this wishlist item
+      const activityData = {
+        title: selectedItem.title,
+        description: selectedItem.description,
+        location: '',
+        day: day,
+        wishlistItemId: selectedItem.id,
+        createdAt: new Date()
+      };
+      
+      // Call the provided callback or save to Firestore and navigate
+      if (onAddToPlanning) {
+        onAddToPlanning(activityData);
+      } else if (planId) {
+        // Save activity to Firestore
+        const activityId = `activity-${Date.now()}`;
+        await setDoc(doc(db, `trips/${planId}/activities`, activityId), activityData);
+        
+        // Navigate to the planning page
+        navigate(`/plan/${planId}/planning`);
+      }
+    } catch (error) {
+      console.error("Error adding item to plan:", error);
+    } finally {
+      // Close the modal
+      setShowAddToPlanModal(false);
+      setSelectedItem(null);
     }
-    
-    // Close the modal
-    setShowAddToPlanModal(false);
-    setSelectedItem(null);
   };
 
   const handleKeyDown = (e) => {
@@ -593,6 +677,16 @@ function Wishlist({ planId, onAddToPlanning }) {
               </div>
               
               <div className="btn-group">
+                {planId && (
+                  <Link 
+                    to={`/trip/${planId}/wishlist/${item.id}/guide`} 
+                    className="btn btn-sm btn-outline-info"
+                    title="View Guide"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    📖
+                  </Link>
+                )}
                 <button 
                   onClick={() => editItem(itemIndex)} 
                   className="btn btn-sm btn-outline-secondary"
@@ -656,13 +750,6 @@ function Wishlist({ planId, onAddToPlanning }) {
 
   return (
     <div className="wishlist-container">
-      {/* Remove this Wishlist header */}
-      {/* 
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="fw-bold">Wishlist</h2>
-      </div>
-      */}
-      
       {/* Add Item Form */}
       <div className="card bg-dark mb-4">
         <div className="card-body">
@@ -769,7 +856,14 @@ function Wishlist({ planId, onAddToPlanning }) {
         </div>
       </div>
 
-      {items.length > 0 ? (
+      {isLoading && items.length === 0 ? (
+        <div className="text-center my-5">
+          <div className="spinner-border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-3">Loading wishlist items...</p>
+        </div>
+      ) : items.length > 0 ? (
         <div>
           {renderRegionSection(null, itemsByRegion.get(null))}
           

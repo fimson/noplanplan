@@ -1,0 +1,79 @@
+.guide-page {
+  max-width: 800px;
+  margin: auto;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  border-bottom: 1px solid #444;
+  padding-bottom: 0.3em;
+  color: #e2e8f0; /* Ensure heading color matches theme */
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin-left: 1.5em;
+  margin-bottom: 1em;
+  padding-left: 1em; /* Add padding for lists */
+}
+
+.markdown-content li {
+    margin-bottom: 0.5em; /* Space out list items */
+}
+
+.markdown-content p {
+  line-height: 1.6;
+  margin-bottom: 1em;
+  color: #cbd5e1; /* Ensure paragraph color matches theme */
+}
+
+/* Inline code */
+.markdown-content code {
+  background-color: #333;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+  color: #e2e8f0;
+}
+
+/* Code blocks */
+.markdown-content pre {
+  background-color: #222; /* Darker background for blocks */
+  padding: 1em;
+  border-radius: 4px;
+  overflow-x: auto; /* Allow horizontal scrolling for long code */
+  margin-bottom: 1em;
+}
+
+.markdown-content pre code {
+  background-color: transparent; /* Code inside pre doesn't need own background */
+  padding: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #555;
+  padding-left: 1em;
+  color: #aaa;
+  margin-left: 0;
+  margin-bottom: 1em;
+  font-style: italic;
+}
+
+.markdown-content a {
+  color: #87ceeb; /* Sky blue links */
+  text-decoration: none;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.markdown-content hr {
+    border: 0;
+    height: 1px;
+    background-color: #444;
+    margin: 2em 0;
+} 

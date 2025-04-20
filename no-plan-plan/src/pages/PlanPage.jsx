@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import RegionManager from '/src/components/RegionManager.jsx';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase-config';
 
 function PlanPage() {
-  const { planId } = useParams();
+  const { tripId } = useParams();
   
   const [plan, setPlan] = useState({
-    id: planId,
-    title: planId === 'japan-2025' ? 'Japan Trip 2025' : 'Iceland 2026',
-    description: planId === 'japan-2025' 
+    id: tripId,
+    title: tripId === 'japan-2025' ? 'Japan Trip 2025' : 'Iceland 2026',
+    description: tripId === 'japan-2025' 
       ? 'Celebrating Yoki\'s birthday in the land of the rising sun' 
       : 'Experience the adventure',
-    image: planId === 'japan-2025'
+    image: tripId === 'japan-2025'
       ? 'https://www.thetrainline.com/cmsmedia/cms/7709/japan_2x.jpg'
       : 'https://media.cntraveler.com/photos/60748e5ed1058698d13c31ee/16:9/w_1920%2Cc_limit/Vatnajokull-Iceland-GettyImages-655074449.jpg',
     startDate: '',
@@ -22,46 +24,140 @@ function PlanPage() {
   
   // Get appropriate flag for the plan
   const getTripFlag = () => {
-    if (planId === 'japan-2025') return '🇯🇵';
-    if (planId === 'iceland-2026') return '🇮🇸';
+    if (tripId === 'japan-2025') return '🇯🇵';
+    if (tripId === 'iceland-2026') return '🇮🇸';
     return '🌍';
   };
 
   // Get appropriate tagline for the plan
   const getTripTagline = () => {
-    if (planId === 'japan-2025') 
+    if (tripId === 'japan-2025') 
       return "Yoki's birthday bash in the land of cherry blossoms";
-    if (planId === 'iceland-2026')
+    if (tripId === 'iceland-2026')
       return "Northern lights and epic landscapes";
     return "Your adventure awaits";
   };
   
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({...plan});
+  const [isLoading, setIsLoading] = useState(true);
   
   // Define default regions
   const defaultRegions = [
-    { id: 'tokyo-default', name: 'Tokyo Area', notes: 'Central Hub' },
-    { id: 'kyoto-default', name: 'Kyoto Region', notes: 'Cultural Heart' }
+    { id: 'tokyo-region', name: 'Tokyo Area', notes: 'Central Hub' },
+    { id: 'kyoto-region', name: 'Kyoto Region', notes: 'Cultural Heart' }
   ];
   
-  const [regions, setRegions] = useState(defaultRegions);
+  const [regions, setRegions] = useState([]);
 
-  // Effect to save regions to localStorage whenever they change
+  // Effect to fetch plan and regions from Firestore
   useEffect(() => {
-    if (planId) {
+    if (!tripId) return;
+    
+    const fetchPlanAndRegions = async () => {
+      setIsLoading(true);
+      
       try {
-        localStorage.setItem(`regions-${planId}`, JSON.stringify(regions));
-        console.log(`Regions saved to localStorage for plan ${planId}`);
+        // Fetch trip details
+        const tripRef = doc(db, 'trips', tripId);
+        const tripSnap = await getDoc(tripRef);
+        
+        if (tripSnap.exists()) {
+          const tripData = tripSnap.data();
+          setPlan({
+            id: tripId,
+            title: tripData.title || plan.title,
+            description: tripData.description || plan.description,
+            image: tripData.image || plan.image,
+            startDate: tripData.startDate || '',
+            endDate: tripData.endDate || '',
+            budget: tripData.budget || '',
+            notes: tripData.notes || ''
+          });
+          setEditForm({
+            id: tripId,
+            title: tripData.title || plan.title,
+            description: tripData.description || plan.description,
+            image: tripData.image || plan.image,
+            startDate: tripData.startDate || '',
+            endDate: tripData.endDate || '',
+            budget: tripData.budget || '',
+            notes: tripData.notes || ''
+          });
+        } else {
+          // If the trip doesn't exist in Firestore yet, create it with default values
+          await setDoc(doc(db, 'trips', tripId), {
+            title: plan.title,
+            description: plan.description,
+            image: plan.image,
+            createdAt: new Date(),
+            lastUpdated: new Date()
+          });
+        }
+        
+        // Fetch regions
+        const regionsRef = collection(db, `trips/${tripId}/regions`);
+        const querySnapshot = await getDocs(regionsRef);
+        
+        const fetchedRegions = [];
+        querySnapshot.forEach((doc) => {
+          fetchedRegions.push({
+            id: doc.id,
+            name: doc.data().name,
+            notes: doc.data().notes || ''
+          });
+        });
+        
+        // If no regions were found, create default regions in Firestore
+        if (fetchedRegions.length === 0 && tripId === 'japan-2025') {
+          // Add default regions to Firestore
+          for (const region of defaultRegions) {
+            await setDoc(doc(db, `trips/${tripId}/regions`, region.id), {
+              name: region.name,
+              notes: region.notes
+            });
+          }
+          setRegions(defaultRegions);
+        } else {
+          setRegions(fetchedRegions);
+        }
       } catch (error) {
-        console.error("Error saving regions to localStorage:", error);
+        console.error("Error fetching trip data from Firestore:", error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [regions, planId]); // Re-run if regions or planId change
+    };
+    
+    fetchPlanAndRegions();
+  }, [tripId]);
 
-  const handleSaveChanges = () => {
-    setPlan({...editForm});
-    setIsEditing(false);
+  const handleSaveChanges = async () => {
+    if (!tripId) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Update trip details in Firestore
+      await setDoc(doc(db, 'trips', tripId), {
+        title: editForm.title,
+        description: editForm.description,
+        image: editForm.image,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate,
+        budget: editForm.budget,
+        notes: editForm.notes,
+        lastUpdated: new Date()
+      }, { merge: true });
+      
+      // Update local state
+      setPlan({...editForm, id: tripId});
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Error updating trip in Firestore:", error);
+      alert("Failed to save changes. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -73,7 +169,16 @@ function PlanPage() {
         <p className="trip-tagline">{getTripTagline()}</p>
       </div>
       
-      {isEditing ? (
+      {isLoading && (
+        <div className="text-center my-5">
+          <div className="spinner-border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-3">Loading trip details...</p>
+        </div>
+      )}
+      
+      {!isLoading && isEditing ? (
         <div className="card bg-dark mb-4 mx-auto" style={{ maxWidth: '900px' }}>
           <div className="card-body">
             <div className="row g-3">
@@ -156,19 +261,23 @@ function PlanPage() {
               <button 
                 onClick={() => setIsEditing(false)} 
                 className="btn btn-secondary me-2"
+                disabled={isLoading}
               >
                 Cancel
               </button>
               <button 
                 onClick={handleSaveChanges} 
                 className="btn btn-primary"
+                disabled={isLoading}
               >
-                Save Changes
+                {isLoading ? (
+                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                ) : 'Save Changes'}
               </button>
             </div>
           </div>
         </div>
-      ) : (
+      ) : !isLoading && (
         <div className="row justify-content-center">
           <div className="col-md-8 mb-4">
             {plan.image && (
@@ -183,6 +292,15 @@ function PlanPage() {
                 }}
               />
             )}
+            
+            <div className="mt-3">
+              <button 
+                onClick={() => setIsEditing(true)}
+                className="btn btn-sm btn-outline-secondary"
+              >
+                Edit Trip Details
+              </button>
+            </div>
           </div>
           
           {plan.notes && (
@@ -204,7 +322,7 @@ function PlanPage() {
             
             <div className="row g-4 justify-content-center">
               <div className="col-12 col-sm-8 col-md-4">
-                <Link to={`/plan/${planId}/planning`} className="text-decoration-none">
+                <Link to={`/trip/${tripId}/planning`} className="text-decoration-none">
                   <div className="card feature-card planning-card primary-feature">
                     <div className="card-body text-center py-4">
                       <div className="feature-icon mb-2">📋</div>
@@ -215,7 +333,7 @@ function PlanPage() {
                 </Link>
               </div>
               <div className="col-12 col-sm-8 col-md-4">
-                <Link to={`/plan/${planId}/bookings`} className="text-decoration-none">
+                <Link to={`/trip/${tripId}/bookings`} className="text-decoration-none">
                   <div className="card feature-card bookings-card">
                     <div className="card-body text-center py-4">
                       <div className="feature-icon mb-2">🎫</div>
@@ -226,7 +344,7 @@ function PlanPage() {
                 </Link>
               </div>
               <div className="col-12 col-sm-8 col-md-4">
-                <Link to={`/plan/${planId}/wishlist`} className="text-decoration-none">
+                <Link to={`/trip/${tripId}/wishlist`} className="text-decoration-none">
                   <div className="card feature-card wishlist-card">
                     <div className="card-body text-center py-4">
                       <div className="feature-icon mb-2">✨</div>
@@ -240,7 +358,7 @@ function PlanPage() {
             
             {/* Render RegionManager below the tools when not editing */}
             <div className="mt-5">
-              <RegionManager regions={regions} setRegions={setRegions} planId={planId} />
+              <RegionManager regions={regions} setRegions={setRegions} planId={tripId} />
             </div>
             
           </div>

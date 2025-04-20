@@ -69,7 +69,7 @@ function HomePage() {
     <div className="home-page text-center">
       <div className="d-flex justify-content-center align-items-center mb-4 flex-column">
         <h2 className="display-4 fw-semibold main-title mb-2">My Travel Plans</h2>
-        <p className="tagline mb-4">NoPlanPlan — We have a plan. Sort of.</p>
+        <p className="tagline mb-4">We have a plan. Sort of.</p>
       </div>
       
       {showForm && (
@@ -165,7 +165,7 @@ function HomePage() {
                 <div className="card-body text-center">
                   <div className="d-flex justify-content-center align-items-start">
                     <h5 className={`card-title modern-title ${plans.length > 1 ? 'text-truncate' : ''} w-100 text-center`}>
-                      <Link to={`/plan/${plan.id}`} className="text-info">
+                      <Link to={`/trip/${plan.id}`} className="text-info">
                         {plan.title}
                       </Link>
                     </h5>
@@ -201,8 +201,14 @@ function HomePage() {
           {showForm ? 'Cancel' : <><span className="plus-icon me-2">➕</span>Create New Plan</>}
         </button>
       </div>
+      
+      <div className="mt-3 mb-5">
+        <Link to="/migrate" className="text-muted db-migration-link">
+          Migrate to Firebase <span className="small-icon">🔄</span>
+        </Link>
+      </div>
 
-      <style jsx>{`
+      <style>{`
         .description-text {
           display: -webkit-box;
           -webkit-line-clamp: 3;
@@ -360,6 +366,25 @@ function HomePage() {
         .plus-icon {
           font-size: 1rem;
           display: inline-block;
+        }
+        
+        .db-migration-link {
+          font-size: 0.9rem;
+          text-decoration: none;
+          padding: 0.3rem 0.8rem;
+          border-radius: 0.25rem;
+          transition: all 0.2s ease;
+          background-color: rgba(52, 58, 64, 0.3);
+          display: inline-block;
+        }
+        
+        .db-migration-link:hover {
+          background-color: rgba(52, 58, 64, 0.6);
+        }
+        
+        .small-icon {
+          font-size: 0.8rem;
+          margin-left: 0.2rem;
         }
       `}</style>
     </div>
