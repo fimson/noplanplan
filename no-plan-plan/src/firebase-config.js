@@ -23,7 +23,8 @@ const db = getFirestore(app);
 
 // For development/testing only
 const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-if (isDev) {
+const useEmulator = false; // Set to false to connect to production Firebase instead of emulator
+if (isDev && useEmulator) {
     try {
         // Attempt to use emulator when in dev mode
         console.log("Attempting to connect to Firestore emulator");

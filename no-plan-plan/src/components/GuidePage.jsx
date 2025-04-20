@@ -118,6 +118,7 @@ function GuidePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [language, setLanguage] = useState('en');
 
   // Mocks now use localStorage, no 'db' instance needed for doc() here -> Now use real Firestore + db
   const guideDocRef = useCallback(() => {
@@ -163,8 +164,10 @@ function GuidePage() {
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setGuideContent(data.content || '');
-          setOriginalContent(data.content || '');
+          // Get content based on current language
+          const content = data[language] || '';
+          setGuideContent(content);
+          setOriginalContent(content);
           // Firestore Timestamps are objects, convert to JS Date if needed
           setLastUpdated(data.lastUpdated?.toDate ? data.lastUpdated.toDate() : null); 
         } else {
@@ -186,7 +189,7 @@ function GuidePage() {
     };
 
     fetchGuideData();
-  }, [tripId, itemId, guideDocRef, itemDocRef]); // Rerun if IDs change
+  }, [tripId, itemId, language, guideDocRef, itemDocRef]); // Rerun if IDs or language change
 
   const handleEdit = () => {
     setOriginalContent(guideContent); // Store current content in case of cancel
@@ -205,9 +208,13 @@ function GuidePage() {
     setError(null);
 
     try {
-      // Use real Firestore setDoc/serverTimestamp 
+      // Get existing document first to preserve other language content
+      const docSnap = await getDoc(currentGuideRef);
+      const existingData = docSnap.exists() ? docSnap.data() : {};
+      
+      // Update only the current language content
       await setDoc(currentGuideRef, { 
-        content: guideContent,
+        [language]: guideContent,
         lastUpdated: serverTimestamp() // Real Firestore serverTimestamp
       }, { merge: true }); 
 
@@ -229,6 +236,17 @@ function GuidePage() {
     }
   };
 
+  const handleLanguageChange = (lang) => {
+    if (editMode) {
+      // If in edit mode, confirm before switching language
+      if (window.confirm('You have unsaved changes. Switch language anyway?')) {
+        setLanguage(lang);
+      }
+    } else {
+      setLanguage(lang);
+    }
+  };
+
   const handleBack = () => {
     // Navigate back to the previous page in history (likely the wishlist)
     navigate(-1);
@@ -240,11 +258,27 @@ function GuidePage() {
         <button onClick={handleBack} className="btn btn-outline-secondary btn-sm">
           &larr; Back to Trip
         </button>
-        {!editMode && !isLoading && (
-          <button onClick={handleEdit} className="btn btn-primary btn-sm" disabled={isSaving}>
-            Edit Guide
+        
+        <div className="d-flex gap-2">
+          <button 
+            onClick={() => handleLanguageChange('en')} 
+            className={`btn btn-sm ${language === 'en' ? 'btn-primary' : 'btn-dark'}`}
+          >
+            EN
           </button>
-        )}
+          <button 
+            onClick={() => handleLanguageChange('ru')} 
+            className={`btn btn-sm ${language === 'ru' ? 'btn-primary' : 'btn-dark'}`}
+          >
+            RU
+          </button>
+          
+          {!editMode && !isLoading && (
+            <button onClick={handleEdit} className="btn btn-primary btn-sm ms-3" disabled={isSaving}>
+              Edit Guide
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading && <div className="text-center"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div></div>}
@@ -273,7 +307,7 @@ function GuidePage() {
                     rows="15"
                     value={guideContent}
                     onChange={(e) => setGuideContent(e.target.value)}
-                    placeholder="Write your guide content here using Markdown..."
+                    placeholder={guideContent ? '' : `No guide written yet in ${language.toUpperCase()}. Write the first one!`}
                     disabled={isSaving}
                     style={{ minHeight: '300px' }}
                   />
@@ -301,7 +335,7 @@ function GuidePage() {
                     </div>
                   ) : (
                     <p className="text-center text-muted fst-italic mt-3">
-                      No guide written yet. Click 'Edit Guide' to start.
+                      No guide written yet in {language.toUpperCase()}. Click 'Edit Guide' to start.
                     </p>
                   )}
                 </>

@@ -163,13 +163,13 @@ function BookingsPage() {
       <div className="d-flex justify-content-center align-items-center mb-4 flex-column">
         <h2 className="fw-bold main-title mb-3">Travel Bookings</h2>
         <div className="d-flex gap-3 mb-4">
-          <Link to={`/plan/${planId}`} className="btn btn-sm btn-outline-secondary">
+          <Link to={`/trip/${planId}`} className="btn btn-sm btn-outline-secondary">
             Overview
           </Link>
-          <Link to={`/plan/${planId}/planning`} className="btn btn-sm btn-outline-secondary">
+          <Link to={`/trip/${planId}/planning`} className="btn btn-sm btn-outline-secondary">
             Planning
           </Link>
-          <Link to={`/plan/${planId}/wishlist`} className="btn btn-sm btn-outline-secondary">
+          <Link to={`/trip/${planId}/wishlist`} className="btn btn-sm btn-outline-secondary">
             Wishlist
           </Link>
         </div>

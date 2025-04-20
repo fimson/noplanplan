@@ -663,13 +663,13 @@ function PlanningPage() {
         <div>
           <h2 className="fw-bold">{planDetails.title}</h2>
           <div className="mt-2">
-            <Link to={`/plan/${tripId}`} className="btn btn-sm btn-outline-secondary me-2">
+            <Link to={`/trip/${tripId}`} className="btn btn-sm btn-outline-secondary me-2">
               Overview
             </Link>
-            <Link to={`/plan/${tripId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
+            <Link to={`/trip/${tripId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
               Bookings
             </Link>
-            <Link to={`/plan/${tripId}/wishlist`} className="btn btn-sm btn-outline-secondary">
+            <Link to={`/trip/${tripId}/wishlist`} className="btn btn-sm btn-outline-secondary">
               Wishlist
             </Link>
           </div>
@@ -1086,7 +1086,7 @@ function PlanningPage() {
                                 </a>
                               )}
                               <Link 
-                                to={`/plan/${tripId}/bookings`}
+                                to={`/trip/${tripId}/bookings`}
                                 className="btn btn-sm btn-outline-secondary"
                               >
                                 Manage Bookings
@@ -1296,14 +1296,17 @@ function PlanningPage() {
         /* Mobile-first calendar layout */
         .calendar-container {
           width: 100%;
-          overflow-x: auto;
           padding-bottom: 1rem;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
+          max-height: none;
+          overflow-y: visible;
+          overflow-x: hidden;
         }
         
         .calendar-container::-webkit-scrollbar {
           height: 8px;
+          width: 8px;
         }
         
         .calendar-container::-webkit-scrollbar-track {
@@ -1316,44 +1319,46 @@ function PlanningPage() {
           border-radius: 4px;
         }
         
-        .calendar-grid {
-          display: flex;
-          gap: 1rem;
-          min-width: min-content;
-          padding: 0.5rem 0.25rem;
+        /* Mobile view - vertical scrolling */
+        @media (max-width: 767.98px) {
+          .calendar-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 0.5rem 0.25rem;
+          }
+          
+          .calendar-day {
+            min-height: 220px;
+            width: 100%;
+            margin-bottom: 0.5rem;
+          }
+          
+          .calendar-day.placeholder {
+            display: none;
+          }
         }
         
-        .calendar-day {
-          min-height: 220px;
-          width: 280px;
-          flex-shrink: 0;
-        }
-        
-        .calendar-day.placeholder {
-          display: none;
-        }
-        
-        .action-buttons {
-          display: flex;
-          justify-content: center;
-          gap: 0.5rem;
-        }
-        
-        /* Tablet and desktop layout */
+        /* Desktop view - grid layout */
         @media (min-width: 768px) {
           .calendar-container {
             overflow-x: visible;
+            overflow-y: visible;
+            max-height: none;
           }
           
           .calendar-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
             min-width: auto;
             padding: 0;
           }
           
           .calendar-day {
             width: auto;
+            min-height: 220px;
+            margin-bottom: 0;
           }
           
           .calendar-day.placeholder {
@@ -1367,6 +1372,12 @@ function PlanningPage() {
           .calendar-grid {
             grid-template-columns: repeat(7, 1fr);
           }
+        }
+        
+        .action-buttons {
+          display: flex;
+          justify-content: center;
+          gap: 0.5rem;
         }
         
         .weekend .card {
