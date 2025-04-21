@@ -63,6 +63,8 @@ function PlanningPage() {
   const [showAddFromWishlist, setShowAddFromWishlist] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
   const [showDayModal, setShowDayModal] = useState(false);
+  const [showWishlistItemModal, setShowWishlistItemModal] = useState(false);
+  const [selectedWishlistItem, setSelectedWishlistItem] = useState(null);
   
   // Fetch plan details and activities from Firestore
   useEffect(() => {
@@ -216,48 +218,7 @@ function PlanningPage() {
 
   // Initialize with sample booking data based on the plan
   const getInitialBookings = () => {
-    if (tripId === 'japan-2025') {
-      return [
-        {
-          id: 'booking-1',
-          name: 'Flight to Tokyo',
-          date: '2025-06-26',
-          link: 'https://www.example.com/flights',
-          notes: 'Japan Airlines, JL123'
-        },
-        {
-          id: 'booking-2',
-          name: 'Hotel in Tokyo',
-          date: '2025-06-26',
-          link: 'https://www.example.com/hotels',
-          notes: 'Check-in: 3PM'
-        },
-        {
-          id: 'booking-3',
-          name: 'Train to Kyoto',
-          date: '2025-07-02',
-          link: 'https://www.japan-guide.com/e/e2361.html',
-          notes: 'Shinkansen, reserved seats'
-        }
-      ];
-    } else if (tripId === 'iceland-2026') {
-      return [
-        {
-          id: 'booking-1',
-          name: 'Flight to Reykjavik',
-          date: '2026-07-15',
-          link: 'https://www.example.com/flights',
-          notes: 'Icelandair, FI614'
-        },
-        {
-          id: 'booking-2',
-          name: 'Rental Car',
-          date: '2026-07-15',
-          link: 'https://www.example.com/cars',
-          notes: '4x4 SUV for the entire trip'
-        }
-      ];
-    }
+    // Return an empty array - no default bookings
     return [];
   };
   
@@ -566,6 +527,29 @@ function PlanningPage() {
     }
   };
   
+  // Get wishlist item details and show modal
+  const showWishlistItemDetails = async (wishlistItemId) => {
+    if (!wishlistItemId || !tripId) return;
+    
+    try {
+      // Fetch the wishlist item from Firestore
+      const itemDoc = await getDoc(doc(db, `trips/${tripId}/wishlist`, wishlistItemId));
+      
+      if (itemDoc.exists()) {
+        const itemData = itemDoc.data();
+        setSelectedWishlistItem({
+          id: wishlistItemId,
+          ...itemData
+        });
+        setShowWishlistItemModal(true);
+      } else {
+        console.error("Wishlist item not found");
+      }
+    } catch (error) {
+      console.error("Error fetching wishlist item:", error);
+    }
+  };
+  
   // Get activities for a specific day
   const getActivitiesForDay = (day) => {
     return activities.filter(act => act.day === day);
@@ -659,8 +643,8 @@ function PlanningPage() {
   
   return (
     <div className="planning-page">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <div>
+      <div className="d-flex justify-content-center align-items-center mb-4">
+        <div className="text-center">
           <h2 className="fw-bold">{planDetails.title}</h2>
           <div className="mt-2">
             <Link to={`/trip/${tripId}`} className="btn btn-sm btn-outline-secondary me-2">
@@ -674,29 +658,12 @@ function PlanningPage() {
             </Link>
           </div>
         </div>
-        <div className="d-flex gap-2">
-          <button 
-            className="btn btn-outline-info" 
-            onClick={() => setShowDateConfig(!showDateConfig)}
-          >
-            {showDateConfig ? 'Cancel' : 'Configure Dates'}
-          </button>
-          <button 
-            className="btn btn-primary" 
-            onClick={() => {
-              setShowForm(!showForm);
-              if (!showForm) setEditingId(null);
-            }}
-          >
-            {showForm ? 'Cancel' : 'Add Activity'}
-          </button>
-        </div>
       </div>
       
       {showDateConfig && (
         <div className="card bg-dark mb-4">
           <div className="card-body">
-            <h5 className="card-title mb-3">Trip Dates</h5>
+            <h5 className="card-title mb-3">Dates</h5>
             <div className="row g-3">
               <div className="col-md-6">
                 <label htmlFor="startDate" className="form-label">Start Date</label>
@@ -738,9 +705,12 @@ function PlanningPage() {
         </div>
       )}
       
-      {/* Trip dates info */}
+      {/* Trip dates info - now clickable */}
       {(planDetails.startDate || planDetails.endDate) && (
-        <div className="alert alert-info mb-4 trip-dates-container">
+        <div 
+          className="alert alert-info mb-4 trip-dates-container clickable"
+          onClick={() => setShowDateConfig(!showDateConfig)}
+        >
           <div className="d-flex align-items-center">
             <span className="trip-dates-icon me-2">📅</span>
             <div>
@@ -754,6 +724,9 @@ function PlanningPage() {
                   {getDaysArray().length} days
                 </span>
               )}
+            </div>
+            <div className="ms-auto">
+              <span className="edit-dates-hint">Click to edit</span>
             </div>
           </div>
         </div>
@@ -1109,7 +1082,10 @@ function PlanningPage() {
                       
                       {getSortedActivitiesForDay(selectedDay).map((activity) => (
                         <div key={activity.id} className="card mb-3">
-                          <div className="card-body">
+                          <div 
+                            className={`card-body ${activity.wishlistItemId ? 'activity-with-wishlist' : ''}`} 
+                            onClick={() => activity.wishlistItemId && showWishlistItemDetails(activity.wishlistItemId)}
+                          >
                             <div className="d-flex justify-content-between align-items-center">
                               <h5 className="card-title mb-0">
                                 <span className="activity-icon me-2">{getActivityIcon(activity.title)}</span>
@@ -1141,18 +1117,30 @@ function PlanningPage() {
                             
                             <div className="d-flex justify-content-end mt-2">
                               <button 
-                                onClick={() => handleEditActivity(activity)} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditActivity(activity);
+                                }} 
                                 className="btn btn-sm btn-outline-secondary me-2"
                               >
                                 Edit
                               </button>
                               <button 
-                                onClick={() => handleDeleteActivity(activity.id)} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteActivity(activity.id);
+                                }} 
                                 className="btn btn-sm btn-outline-danger"
                               >
                                 Delete
                               </button>
                             </div>
+                            
+                            {activity.wishlistItemId && (
+                              <div className="view-wishlist-hint mt-2">
+                                <small>Click to view wishlist details</small>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1199,6 +1187,73 @@ function PlanningPage() {
         </CustomModal>
       )}
 
+      {/* Wishlist Item Details Modal */}
+      {showWishlistItemModal && selectedWishlistItem && (
+        <CustomModal
+          isOpen={showWishlistItemModal}
+          onClose={() => setShowWishlistItemModal(false)}
+          title="Wishlist Item Details"
+          size="lg"
+          footer={
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setShowWishlistItemModal(false)}
+            >
+              Close
+            </button>
+          }
+        >
+          <div className="wishlist-item-details">
+            <h4 className="mb-3">{selectedWishlistItem.title}</h4>
+            
+            {selectedWishlistItem.imageUrl && (
+              <div className="wishlist-image-container mb-3">
+                <img 
+                  src={selectedWishlistItem.imageUrl} 
+                  alt={selectedWishlistItem.title} 
+                  className="wishlist-image"
+                />
+              </div>
+            )}
+            
+            {selectedWishlistItem.description && (
+              <div className="description-section mb-3">
+                <h6 className="text-muted mb-2">Description</h6>
+                <p>{selectedWishlistItem.description}</p>
+              </div>
+            )}
+            
+            {selectedWishlistItem.notes && (
+              <div className="notes-section mb-3">
+                <h6 className="text-muted mb-2">Notes</h6>
+                <p>{selectedWishlistItem.notes}</p>
+              </div>
+            )}
+            
+            {selectedWishlistItem.location && (
+              <div className="location-section mb-3">
+                <h6 className="text-muted mb-2">Location</h6>
+                <p className="text-info">📍 {selectedWishlistItem.location}</p>
+              </div>
+            )}
+            
+            {selectedWishlistItem.link && (
+              <div className="link-section mb-3">
+                <h6 className="text-muted mb-2">Link</h6>
+                <a 
+                  href={selectedWishlistItem.link} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="btn btn-sm btn-outline-info"
+                >
+                  Visit Website
+                </a>
+              </div>
+            )}
+          </div>
+        </CustomModal>
+      )}
+
       <style jsx>{`
         .date-badge {
           font-size: 0.75rem;
@@ -1211,6 +1266,48 @@ function PlanningPage() {
           color: #adb5bd;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+        }
+        
+        .clickable {
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .clickable:hover {
+          background-color: #0d6efd40;
+        }
+        
+        .edit-dates-hint {
+          font-size: 0.8rem;
+          opacity: 0.7;
+        }
+        
+        .activity-with-wishlist {
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .activity-with-wishlist:hover {
+          background-color: rgba(13, 202, 240, 0.1);
+        }
+        
+        .view-wishlist-hint {
+          text-align: center;
+          color: #0dcaf0;
+          opacity: 0.7;
+        }
+        
+        .wishlist-image-container {
+          width: 100%;
+          max-height: 300px;
+          overflow: hidden;
+          border-radius: 8px;
+        }
+        
+        .wishlist-image {
+          width: 100%;
+          height: auto;
+          object-fit: cover;
         }
         
         .day-title {

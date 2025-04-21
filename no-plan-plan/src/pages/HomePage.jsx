@@ -202,12 +202,6 @@ function HomePage() {
         </button>
       </div>
       
-      <div className="mt-3 mb-5">
-        <Link to="/migrate" className="text-muted db-migration-link">
-          Migrate to Firebase <span className="small-icon">🔄</span>
-        </Link>
-      </div>
-
       <style>{`
         .description-text {
           display: -webkit-box;
@@ -366,25 +360,6 @@ function HomePage() {
         .plus-icon {
           font-size: 1rem;
           display: inline-block;
-        }
-        
-        .db-migration-link {
-          font-size: 0.9rem;
-          text-decoration: none;
-          padding: 0.3rem 0.8rem;
-          border-radius: 0.25rem;
-          transition: all 0.2s ease;
-          background-color: rgba(52, 58, 64, 0.3);
-          display: inline-block;
-        }
-        
-        .db-migration-link:hover {
-          background-color: rgba(52, 58, 64, 0.6);
-        }
-        
-        .small-icon {
-          font-size: 0.8rem;
-          margin-left: 0.2rem;
         }
       `}</style>
     </div>

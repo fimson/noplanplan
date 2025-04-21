@@ -1,33 +1,136 @@
 .guide-page {
   max-width: 800px;
-  margin: auto;
+  margin: 0 auto 0 0;
 }
 
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3 {
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  border-bottom: 1px solid #444;
-  padding-bottom: 0.3em;
-  color: #e2e8f0; /* Ensure heading color matches theme */
+.guide-page h1, .guide-page h2, .guide-page h3, .guide-page h4, .guide-page h5, .guide-page h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  color: #f8fafc;
+  text-align: left;
 }
 
-.markdown-content ul,
-.markdown-content ol {
-  margin-left: 1.5em;
-  margin-bottom: 1em;
-  padding-left: 1em; /* Add padding for lists */
+.guide-page .markdown-content h1 {
+  font-size: 1.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 0.5rem;
 }
 
-.markdown-content li {
-    margin-bottom: 0.5em; /* Space out list items */
+.guide-page .markdown-content h2 {
+  font-size: 1.5rem;
+  margin-top: 2rem;
 }
 
-.markdown-content p {
+.guide-page .markdown-content h3 {
+  font-size: 1.25rem;
+}
+
+.guide-page .markdown-content p {
+  margin-bottom: 1rem;
   line-height: 1.6;
-  margin-bottom: 1em;
-  color: #cbd5e1; /* Ensure paragraph color matches theme */
+  text-align: left;
+}
+
+.guide-page .markdown-content ul, .guide-page .markdown-content ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  text-align: left;
+}
+
+.guide-page .markdown-content li {
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.guide-page .markdown-content blockquote {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1rem;
+  margin-left: 0;
+  color: #94a3b8;
+  font-style: italic;
+  text-align: left;
+}
+
+.guide-page .markdown-content code {
+  background-color: rgba(71, 85, 105, 0.4);
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-family: monospace;
+}
+
+.guide-page .markdown-content pre {
+  background-color: #1e293b;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.guide-page .markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  color: #94a3b8;
+}
+
+.guide-page .markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+}
+
+.guide-page .markdown-content a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.guide-page .markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.guide-page .markdown-content table {
+  width: 100%;
+  margin-bottom: 1.5rem;
+  border-collapse: collapse;
+}
+
+.guide-page .markdown-content th, .guide-page .markdown-content td {
+  padding: 0.75rem;
+  border: 1px solid #475569;
+}
+
+.guide-page .markdown-content th {
+  background-color: #1e293b;
+  font-weight: 600;
+}
+
+/* Text alignment classes for markdown content */
+.markdown-content .text-left {
+  text-align: left !important;
+}
+
+.markdown-content .text-center {
+  text-align: center !important;
+}
+
+.markdown-content .text-right {
+  text-align: right !important;
+}
+
+/* Ensure guide content is left-aligned by default */
+.guide-page .card-body,
+.guide-page .markdown-content,
+.guide-page .markdown-content * {
+  text-align: left;
+}
+
+/* Allow specific alignment classes to override the default */
+.guide-page .markdown-content .text-center {
+  text-align: center !important;
+}
+
+.guide-page .markdown-content .text-right {
+  text-align: right !important;
 }
 
 /* Inline code */

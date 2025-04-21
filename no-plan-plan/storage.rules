@@ -5,8 +5,16 @@ rules_version = '2';
 //    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    // Default: deny all
     match /{allPaths=**} {
       allow read, write: if false;
+    }
+    
+    // Allow access to trip documents
+    match /trips/{tripId}/{allPaths=**} {
+      // Allow read/write for all users for now
+      // In a production app, you'd want to add authentication
+      allow read, write: if true;
     }
   }
 }

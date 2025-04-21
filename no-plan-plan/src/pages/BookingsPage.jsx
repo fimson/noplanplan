@@ -1,69 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
+import { db, storage } from '../firebase-config';
 
 function BookingsPage() {
-  const { planId } = useParams();
+  const { tripId } = useParams();
   
-  // Initialize with sample data based on the plan
-  const getInitialBookings = () => {
-    if (planId === 'japan-2025') {
-      return [
-        {
-          id: 1,
-          name: 'Flight to Tokyo',
-          date: '2025-06-26',
-          link: 'https://www.example.com/flights',
-          notes: 'Japan Airlines, JL123'
-        },
-        {
-          id: 2,
-          name: 'Hotel in Tokyo',
-          date: '2025-06-26',
-          link: 'https://www.example.com/hotels',
-          notes: 'Check-in: 3PM'
-        },
-        {
-          id: 3,
-          name: 'Train to Kyoto',
-          date: '2025-07-02',
-          link: 'https://www.japan-guide.com/e/e2361.html',
-          notes: 'Shinkansen, reserved seats'
-        }
-      ];
-    } else if (planId === 'iceland-2026') {
-      return [
-        {
-          id: 1,
-          name: 'Flight to Reykjavik',
-          date: '2026-07-15',
-          link: 'https://www.example.com/flights',
-          notes: 'Icelandair, FI614'
-        },
-        {
-          id: 2,
-          name: 'Rental Car',
-          date: '2026-07-15',
-          link: 'https://www.example.com/cars',
-          notes: '4x4 SUV for the entire trip'
-        }
-      ];
-    }
-    return [];
-  };
-
-  // Load bookings from localStorage or use default
-  const getStoredBookings = () => {
-    try {
-      const storageKey = `bookings-${planId}`;
-      const storedBookings = localStorage.getItem(storageKey);
-      return storedBookings ? JSON.parse(storedBookings) : getInitialBookings();
-    } catch (error) {
-      console.error("Error loading bookings from localStorage:", error);
-      return getInitialBookings();
-    }
-  };
-
-  const [bookings, setBookings] = useState(getStoredBookings);
+  const [bookings, setBookings] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [newBooking, setNewBooking] = useState({
@@ -72,16 +16,86 @@ function BookingsPage() {
     link: '',
     notes: ''
   });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [showDocUpload, setShowDocUpload] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [successMessage, setSuccessMessage] = useState('');
 
-  // Save bookings to localStorage when they change
+  // Fetch bookings from Firestore
   useEffect(() => {
-    try {
-      const storageKey = `bookings-${planId}`;
-      localStorage.setItem(storageKey, JSON.stringify(bookings));
-    } catch (error) {
-      console.error("Error saving bookings to localStorage:", error);
-    }
-  }, [bookings, planId]);
+    const fetchBookings = async () => {
+      if (!tripId) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Fetch bookings from Firestore
+        const bookingsRef = collection(db, `trips/${tripId}/bookings`);
+        const bookingsSnapshot = await getDocs(bookingsRef);
+        
+        const fetchedBookings = [];
+        bookingsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedBookings.push({
+            id: doc.id,
+            name: data.name,
+            date: data.date || '',
+            link: data.link || '',
+            notes: data.notes || ''
+          });
+        });
+        
+        setBookings(fetchedBookings);
+      } catch (err) {
+        console.error("Error fetching bookings from Firestore:", err);
+        setError("Failed to load bookings. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchBookings();
+  }, [tripId]);
+
+  // Fetch documents from Firebase Storage
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!tripId) return;
+      
+      try {
+        const docsListRef = ref(storage, `trips/${tripId}/documents`);
+        const docsList = await listAll(docsListRef);
+        
+        const docsData = await Promise.all(docsList.items.map(async (item) => {
+          const url = await getDownloadURL(item);
+          const bookingId = item.name.split('_')[0]; // Extract booking ID from filename
+          const filename = item.name.split('_').slice(1).join('_'); // Extract original filename
+          
+          return {
+            id: item.name,
+            name: filename,
+            url,
+            bookingId,
+            fullPath: item.fullPath
+          };
+        }));
+        
+        setDocuments(docsData);
+      } catch (err) {
+        // If the folder doesn't exist yet, this is normal
+        if (!err.message.includes('storage/object-not-found')) {
+          console.error("Error fetching documents:", err);
+        }
+      }
+    };
+    
+    fetchDocuments();
+  }, [tripId]);
 
   // Get icon for booking type
   const getBookingIcon = (bookingName) => {
@@ -110,44 +124,85 @@ function BookingsPage() {
     }
   };
 
-  const handleSaveBooking = () => {
+  const handleSaveBooking = async () => {
     if (!newBooking.name.trim() || !newBooking.date) return;
-
-    if (editingId) {
-      setBookings(bookings.map(booking => 
-        booking.id === editingId ? { ...newBooking, id: editingId } : booking
-      ));
-      setEditingId(null);
-    } else {
-      const id = Date.now();
-      setBookings([...bookings, { ...newBooking, id }]);
+    
+    try {
+      if (editingId) {
+        // Update existing booking in Firestore
+        const bookingRef = doc(db, `trips/${tripId}/bookings`, editingId);
+        await updateDoc(bookingRef, {
+          name: newBooking.name,
+          date: newBooking.date,
+          link: newBooking.link || '',
+          notes: newBooking.notes || '',
+          updatedAt: new Date()
+        });
+        
+        // Update local state
+        setBookings(bookings.map(booking => 
+          booking.id === editingId ? { ...newBooking, id: editingId } : booking
+        ));
+        setEditingId(null);
+      } else {
+        // Create a new booking ID
+        const id = `booking-${Date.now()}`;
+        
+        // Add new booking to Firestore
+        const bookingRef = doc(db, `trips/${tripId}/bookings`, id);
+        await setDoc(bookingRef, {
+          name: newBooking.name,
+          date: newBooking.date,
+          link: newBooking.link || '',
+          notes: newBooking.notes || '',
+          createdAt: new Date()
+        });
+        
+        // Update local state
+        setBookings([...bookings, { ...newBooking, id }]);
+      }
+      
+      // Reset form
+      setNewBooking({
+        name: '',
+        date: '',
+        link: '',
+        notes: ''
+      });
+      setShowForm(false);
+    } catch (err) {
+      console.error("Error saving booking to Firestore:", err);
+      alert("Failed to save booking. Please try again.");
     }
-
-    setNewBooking({
-      name: '',
-      date: '',
-      link: '',
-      notes: ''
-    });
-    setShowForm(false);
   };
 
   const handleEditBooking = (booking) => {
     setNewBooking({
       name: booking.name,
       date: booking.date,
-      link: booking.link,
+      link: booking.link || '',
       notes: booking.notes || ''
     });
     setEditingId(booking.id);
     setShowForm(true);
   };
 
-  const handleDeleteBooking = (id) => {
-    setBookings(bookings.filter(booking => booking.id !== id));
-    if (editingId === id) {
-      setEditingId(null);
-      setShowForm(false);
+  const handleDeleteBooking = async (id) => {
+    try {
+      // Delete from Firestore
+      const bookingRef = doc(db, `trips/${tripId}/bookings`, id);
+      await deleteDoc(bookingRef);
+      
+      // Update local state
+      setBookings(bookings.filter(booking => booking.id !== id));
+      
+      if (editingId === id) {
+        setEditingId(null);
+        setShowForm(false);
+      }
+    } catch (err) {
+      console.error("Error deleting booking from Firestore:", err);
+      alert("Failed to delete booking. Please try again.");
     }
   };
 
@@ -158,22 +213,139 @@ function BookingsPage() {
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
+  // Handle document upload for a specific booking
+  const handleDocumentUpload = async (e, bookingId) => {
+    const file = e.target.files[0];
+    if (!file || !bookingId) return;
+    
+    setUploadingDoc(true);
+    setUploadProgress(0);
+    setSuccessMessage('');
+    
+    try {
+      // Create a reference to the file in Firebase Storage
+      const fileName = `${bookingId}_${file.name}`;
+      const storageRef = ref(storage, `trips/${tripId}/documents/${fileName}`);
+      
+      // Create upload task
+      const uploadTask = uploadBytes(storageRef, file);
+      
+      // Monitor upload progress - Note: uploadBytes doesn't support progress monitoring
+      // To show some visual feedback, we'll use a simulated progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+      
+      // Wait for upload to complete
+      await uploadTask;
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      // Add to local state
+      const newDoc = {
+        id: fileName,
+        name: file.name,
+        url: downloadURL,
+        bookingId,
+        fullPath: storageRef.fullPath
+      };
+      
+      setDocuments(prev => [...prev, newDoc]);
+      
+      // Update booking to indicate it has documents
+      const bookingRef = doc(db, `trips/${tripId}/bookings`, bookingId);
+      await updateDoc(bookingRef, {
+        hasDocuments: true,
+        updatedAt: new Date()
+      });
+      
+      // Update local state
+      setBookings(bookings.map(booking => 
+        booking.id === bookingId ? { ...booking, hasDocuments: true } : booking
+      ));
+      
+      // Set success message
+      setSuccessMessage(`Document "${file.name}" uploaded successfully!`);
+      setTimeout(() => setSuccessMessage(''), 5000); // Clear after 5 seconds
+      
+      setShowDocUpload(false);
+      setSelectedBookingId(null);
+    } catch (err) {
+      console.error("Error uploading document:", err);
+      alert(`Failed to upload document: ${err.message}`);
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  // Delete a document
+  const handleDeleteDocument = async (document) => {
+    try {
+      // Delete from Firebase Storage
+      const docRef = ref(storage, document.fullPath);
+      await deleteObject(docRef);
+      
+      // Update local state
+      setDocuments(documents.filter(doc => doc.id !== document.id));
+      
+      // Check if this was the last document for this booking
+      const remainingDocs = documents.filter(doc => 
+        doc.bookingId === document.bookingId && doc.id !== document.id
+      );
+      
+      if (remainingDocs.length === 0) {
+        // Update booking to indicate it no longer has documents
+        const bookingRef = doc(db, `trips/${tripId}/bookings`, document.bookingId);
+        await updateDoc(bookingRef, {
+          hasDocuments: false,
+          updatedAt: new Date()
+        });
+        
+        // Update local state
+        setBookings(bookings.map(booking => 
+          booking.id === document.bookingId ? { ...booking, hasDocuments: false } : booking
+        ));
+      }
+    } catch (err) {
+      console.error("Error deleting document:", err);
+      alert("Failed to delete document. Please try again.");
+    }
+  };
+
+  // Get documents for a specific booking
+  const getBookingDocuments = (bookingId) => {
+    return documents.filter(doc => doc.bookingId === bookingId);
+  };
+
   return (
     <div className="bookings-page text-center">
       <div className="d-flex justify-content-center align-items-center mb-4 flex-column">
         <h2 className="fw-bold main-title mb-3">Travel Bookings</h2>
         <div className="d-flex gap-3 mb-4">
-          <Link to={`/trip/${planId}`} className="btn btn-sm btn-outline-secondary">
+          <Link to={`/trip/${tripId}`} className="btn btn-sm btn-outline-secondary">
             Overview
           </Link>
-          <Link to={`/trip/${planId}/planning`} className="btn btn-sm btn-outline-secondary">
+          <Link to={`/trip/${tripId}/planning`} className="btn btn-sm btn-outline-secondary">
             Planning
           </Link>
-          <Link to={`/trip/${planId}/wishlist`} className="btn btn-sm btn-outline-secondary">
+          <Link to={`/trip/${tripId}/wishlist`} className="btn btn-sm btn-outline-secondary">
             Wishlist
           </Link>
         </div>
       </div>
+      
+      {error && <div className="alert alert-danger">{error}</div>}
+      {successMessage && <div className="alert alert-success">{successMessage}</div>}
+      {isLoading && <div className="text-center"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div></div>}
 
       {showForm && (
         <div className="card bg-dark mb-4 mx-auto" style={{ maxWidth: '700px' }}>
@@ -246,98 +418,159 @@ function BookingsPage() {
         </div>
       )}
 
-      <div className="card mx-auto" style={{ maxWidth: '900px' }}>
-        <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h5 className="card-title mb-0">Your Bookings</h5>
-            <button 
-              className="btn btn-sm btn-primary" 
-              onClick={() => {
-                setShowForm(!showForm);
-                if (!showForm) setEditingId(null);
-              }}
-            >
-              {showForm ? 'Cancel' : '+ Add Booking'}
-            </button>
-          </div>
+      {!isLoading && (
+        <div className="card mx-auto" style={{ maxWidth: '900px' }}>
+          <div className="card-body">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="card-title mb-0">Your Bookings</h5>
+              <button 
+                className="btn btn-sm btn-primary" 
+                onClick={() => {
+                  setShowForm(!showForm);
+                  if (!showForm) setEditingId(null);
+                }}
+              >
+                {showForm ? 'Cancel' : '+ Add Booking'}
+              </button>
+            </div>
 
-          {bookings.length > 0 ? (
-            <div className="table-responsive">
-              <table className="table table-hover">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Date</th>
-                    <th>Notes</th>
-                    <th>Link</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map(booking => (
-                    <tr key={booking.id}>
-                      <td>
-                        <span className="booking-icon me-2">{getBookingIcon(booking.name)}</span>
-                        {booking.name}
-                      </td>
-                      <td>{formatDate(booking.date)}</td>
-                      <td className="text-truncate" style={{ maxWidth: '200px' }}>{booking.notes}</td>
-                      <td>
-                        {booking.link && (
-                          <a href={booking.link} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-info">
-                            View
-                          </a>
-                        )}
-                      </td>
-                      <td>
-                        <div className="d-flex gap-2 justify-content-center">
-                          <button 
-                            onClick={() => handleEditBooking(booking)} 
-                            className="btn btn-sm btn-outline-secondary"
-                            title="Edit"
-                          >
-                            ✏️
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteBooking(booking.id)} 
-                            className="btn btn-sm btn-outline-danger"
-                            title="Delete"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </td>
+            {bookings.length > 0 ? (
+              <div className="table-responsive">
+                <table className="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Date</th>
+                      <th>Notes</th>
+                      <th>Documents</th>
+                      <th>Link</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="alert alert-info text-center">
-              No bookings yet. Add your first booking to keep track of your travel arrangements.
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {bookings.map(booking => (
+                      <tr key={booking.id}>
+                        <td>
+                          <span className="booking-icon me-2">{getBookingIcon(booking.name)}</span>
+                          {booking.name}
+                        </td>
+                        <td>{formatDate(booking.date)}</td>
+                        <td className="text-truncate" style={{ maxWidth: '150px' }}>{booking.notes}</td>
+                        <td>
+                          {/* Documents section */}
+                          <div className="d-flex flex-column">
+                            {getBookingDocuments(booking.id).map(doc => (
+                              <div key={doc.id} className="mb-1 d-flex align-items-center">
+                                <a 
+                                  href={doc.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="btn btn-sm btn-outline-info me-1"
+                                >
+                                  📄 {doc.name.length > 15 ? doc.name.substring(0, 12) + '...' : doc.name}
+                                </a>
+                                <button 
+                                  className="btn btn-sm btn-outline-danger btn-sm" 
+                                  onClick={() => handleDeleteDocument(doc)}
+                                  title="Delete document"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            
+                            {/* Upload button */}
+                            {(selectedBookingId !== booking.id || !showDocUpload) && (
+                              <button 
+                                className="btn btn-sm btn-outline-secondary" 
+                                onClick={() => {
+                                  setSelectedBookingId(booking.id);
+                                  setShowDocUpload(true);
+                                }}
+                              >
+                                + Upload
+                              </button>
+                            )}
+                            
+                            {/* File input appears when upload is clicked */}
+                            {selectedBookingId === booking.id && showDocUpload && (
+                              <div className="mt-2">
+                                <input 
+                                  type="file" 
+                                  className="form-control form-control-sm" 
+                                  onChange={(e) => handleDocumentUpload(e, booking.id)}
+                                  disabled={uploadingDoc}
+                                />
+                                {uploadingDoc && (
+                                  <div className="progress mt-1" style={{ height: '5px' }}>
+                                    <div 
+                                      className="progress-bar" 
+                                      role="progressbar" 
+                                      style={{ width: `${uploadProgress}%` }} 
+                                      aria-valuenow={uploadProgress} 
+                                      aria-valuemin="0" 
+                                      aria-valuemax="100"
+                                    ></div>
+                                  </div>
+                                )}
+                                <button 
+                                  className="btn btn-sm btn-outline-secondary mt-1" 
+                                  onClick={() => {
+                                    setShowDocUpload(false);
+                                    setSelectedBookingId(null);
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          {booking.link && (
+                            <a href={booking.link} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-info">
+                              View
+                            </a>
+                          )}
+                        </td>
+                        <td>
+                          <div className="d-flex gap-2 justify-content-center">
+                            <button 
+                              className="btn btn-sm btn-outline-primary" 
+                              onClick={() => handleEditBooking(booking)}
+                            >
+                              Edit
+                            </button>
+                            <button 
+                              className="btn btn-sm btn-outline-danger" 
+                              onClick={() => handleDeleteBooking(booking.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="alert alert-info text-center">
+                No bookings found. Click "Add Booking" to create your first booking.
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-
-      <style jsx>{`
+      )}
+      
+      <style>{`
+        .booking-icon {
+          font-size: 1.2rem;
+        }
+        
         .main-title {
           font-family: 'Inter', sans-serif;
           letter-spacing: -0.03em;
-          font-weight: 700;
-        }
-        
-        .table th {
-          font-weight: 600;
-          font-family: 'Inter', sans-serif;
-        }
-        
-        .table td {
-          vertical-align: middle;
-        }
-        
-        .booking-icon {
-          font-size: 1.2rem;
         }
       `}</style>
     </div>

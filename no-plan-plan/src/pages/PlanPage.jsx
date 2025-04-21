@@ -137,13 +137,11 @@ function PlanPage() {
     setIsLoading(true);
     
     try {
-      // Update trip details in Firestore
+      // Update trip details in Firestore - removed date fields
       await setDoc(doc(db, 'trips', tripId), {
         title: editForm.title,
         description: editForm.description,
         image: editForm.image,
-        startDate: editForm.startDate,
-        endDate: editForm.endDate,
         budget: editForm.budget,
         notes: editForm.notes,
         lastUpdated: new Date()
@@ -210,26 +208,6 @@ function PlanPage() {
                   value={editForm.description}
                   onChange={(e) => setEditForm({...editForm, description: e.target.value})}
                   rows="2"
-                />
-              </div>
-              <div className="col-md-6">
-                <label htmlFor="startDate" className="form-label">Start Date</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  id="startDate"
-                  value={editForm.startDate}
-                  onChange={(e) => setEditForm({...editForm, startDate: e.target.value})}
-                />
-              </div>
-              <div className="col-md-6">
-                <label htmlFor="endDate" className="form-label">End Date</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  id="endDate"
-                  value={editForm.endDate}
-                  onChange={(e) => setEditForm({...editForm, endDate: e.target.value})}
                 />
               </div>
               <div className="col-md-6">
@@ -314,6 +292,26 @@ function PlanPage() {
             </div>
           )}
           
+          {/* "About Japan" Card */}
+          {tripId === 'japan-2025' && (
+            <div className="col-md-10 mt-4">
+              <Link to={`/trip/${tripId}/about`} className="text-decoration-none">
+                <div className="card about-card mb-4">
+                  <div className="card-body d-flex align-items-center">
+                    <div className="about-icon me-3">📘</div>
+                    <div className="flex-grow-1">
+                      <h3 className="about-title mb-1">About Japan</h3>
+                      <p className="about-text mb-2">History, culture, etiquette — everything to brief your brain before your boarding pass.</p>
+                      <div className="text-end">
+                        <span className="about-cta">Explore topics →</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          )}
+          
           {/* Large thumbnail cards for Planning and Wishlist */}
           <div className="col-md-10 mt-4">
             <div className="divider mb-4">
@@ -337,7 +335,7 @@ function PlanPage() {
                   <div className="card feature-card bookings-card">
                     <div className="card-body text-center py-4">
                       <div className="feature-icon mb-2">🎫</div>
-                      <h3 className="card-title feature-title">Bookings</h3>
+                      <h3 className="card-title feature-title">Logistics</h3>
                       <p className="card-text feature-text">Track flights, hotels, and reservations</p>
                     </div>
                   </div>
@@ -517,6 +515,48 @@ function PlanPage() {
           .feature-title {
             font-size: 1.25rem;
           }
+        }
+        
+        .about-card {
+          background: linear-gradient(to right, #1a2635, #2c3e50);
+          border: 2px solid #4e76c7;
+          border-left: 5px solid #4e76c7;
+          transition: all 0.3s ease;
+          color: white;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .about-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+          border-color: #64a0db;
+        }
+        
+        .about-icon {
+          font-size: 2.5rem;
+          color: #64a0db;
+        }
+        
+        .about-title {
+          font-size: 1.4rem;
+          font-weight: 600;
+        }
+        
+        .about-text {
+          font-size: 0.95rem;
+          color: #b3cdeb;
+          font-style: italic;
+        }
+        
+        .about-cta {
+          font-size: 0.9rem;
+          color: #64a0db;
+          font-weight: 500;
+          transition: all 0.2s ease;
+        }
+        
+        .about-card:hover .about-cta {
+          color: #a2c8f0;
         }
       `}</style>
     </div>

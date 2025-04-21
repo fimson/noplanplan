@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, enableIndexedDbPersistence, connectFirestoreEmulator, collection, doc, getDoc, setDoc } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 // Replace the placeholder values below with your actual Firebase project configuration
@@ -20,6 +21,9 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with error handling
 const db = getFirestore(app);
+
+// Initialize Firebase Storage
+const storage = getStorage(app);
 
 // For development/testing only
 const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -110,4 +114,4 @@ setTimeout(() => {
     checkFirestoreConnection();
 }, 2000);  // 2 second delay
 
-export { db, checkFirestoreConnection }; 
+export { db, checkFirestoreConnection, storage }; 

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
@@ -11,34 +11,47 @@ import PlanningPage from './pages/PlanningPage'
 import PlanWishlistPage from './pages/PlanWishlistPage'
 import BookingsPage from './pages/BookingsPage'
 import GuidePage from './components/GuidePage'
+import AboutJapanPage from './pages/AboutJapanPage'
 import MigrateToFirebase from './components/MigrateToFirebase'
 
 function HeaderWithBackButton() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   
-  // Check if we're on a trip subpage (planning, wishlist, bookings, guide)
-  const pathSegments = location.pathname.split('/').filter(segment => segment !== '');
-  const isTripSubpage = pathSegments.length >= 2 && pathSegments[0] === 'trip'; 
-  const tripId = isTripSubpage ? pathSegments[1] : null;
+  // Check if we're on a guide page
+  const isGuidePage = location.pathname.includes('/guide/') || location.pathname.includes('/about');
   
-  let backLinkText = "← Back to all trips";
-  let backLinkUrl = "/";
-  
-  if (isTripSubpage && pathSegments.length === 2) {
-      backLinkText = "← Back to all trips";
-      backLinkUrl = "/";
-  } else if (isTripSubpage && pathSegments.length > 2) {
-      backLinkText = "← Back to trip";
-      backLinkUrl = `/trip/${tripId}`; 
-  }
+  const handleBack = () => {
+    // Extract the current path and navigate up one hierarchy level
+    const currentPath = location.pathname;
+    
+    // Remove trailing slash if it exists
+    const path = currentPath.endsWith('/') ? currentPath.slice(0, -1) : currentPath;
+    
+    // Find the last slash to determine the parent path
+    const lastSlashIndex = path.lastIndexOf('/');
+    
+    if (lastSlashIndex <= 0) {
+      // If we're already at the root or only one level deep, go to home
+      navigate('/');
+    } else {
+      // Navigate to the parent path
+      const parentPath = path.substring(0, lastSlashIndex);
+      navigate(parentPath);
+    }
+  };
   
   return (
     <header className="pb-3 mb-4 border-bottom position-relative">
-      {!isHomePage && (
-        <Link to={backLinkUrl} className="position-absolute text-gray-400 back-link">
-          {backLinkText}
-        </Link>
+      {!isHomePage && !isGuidePage && (
+        <button 
+          onClick={handleBack} 
+          className="btn btn-link position-absolute text-gray-400 back-link"
+          title="Go up one level"
+        >
+          &larr;
+        </button>
       )}
       <div className="text-center">
         <Link to="/" className="text-decoration-none">
@@ -63,6 +76,8 @@ function App() {
             <Route path="/trip/:tripId/wishlist" element={<PlanWishlistPage />} />
             <Route path="/trip/:tripId/wishlist/:itemId/guide" element={<GuidePage />} />
             <Route path="/trip/:tripId/bookings" element={<BookingsPage />} />
+            <Route path="/trip/:tripId/about" element={<AboutJapanPage />} />
+            <Route path="/trip/:tripId/guide/:itemId" element={<GuidePage />} />
             <Route path="/migrate" element={<MigrateToFirebase />} />
           </Routes>
         </main>
@@ -76,15 +91,17 @@ function App() {
         .back-link {
           top: 0;
           left: 0;
-          font-size: 0.9rem;
+          font-size: 1.2rem;
           color: #94a3b8;
           text-decoration: none;
           transition: color 0.2s ease;
+          background: none;
+          border: none;
+          padding: 0.5rem 1rem;
         }
         
         .back-link:hover {
           color: #e2e8f0;
-          text-decoration: underline;
         }
       `}</style>
     </Router>

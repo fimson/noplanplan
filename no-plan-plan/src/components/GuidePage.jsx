@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 // Assume Firestore is initialized and 'db' is exported from firebase config
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config'; // Adjust path as needed
 import './GuidePage.css'; // Import the CSS file
+
+// Define the topic titles and emojis
+const guideTopics = {
+  'history': { title: 'History Overview', emoji: '📜' },
+  'religion-culture': { title: 'Religion & Culture', emoji: '🧘‍♀️' },
+  'modern-japan': { title: 'Modern Japan', emoji: '💸' },
+  'etiquette': { title: 'Etiquette & Behavior', emoji: '🍣' },
+  'fun-facts': { title: 'Fun Facts & Family Pre-Reading', emoji: '🧠' }
+};
 
 // --- LocalStorage Mock Firestore Functions (Replace with actual imports in production) ---
 
@@ -108,7 +117,6 @@ initializeMockData(); // Run once on script load
 
 function GuidePage() {
   const { tripId, itemId } = useParams();
-  const navigate = useNavigate();
 
   const [guideContent, setGuideContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
@@ -119,13 +127,40 @@ function GuidePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [language, setLanguage] = useState('en');
+  const [isTopicGuide, setIsTopicGuide] = useState(false);
+
+  // Check if this is a topic-based guide or a wishlist item guide
+  useEffect(() => {
+    console.log('GuidePage - URL params:', { tripId, itemId });
+    console.log('GuidePage - Is topic in guide topics?', !!guideTopics[itemId]);
+    
+    if (itemId && guideTopics[itemId]) {
+      console.log('GuidePage - This is a topic guide');
+      setIsTopicGuide(true);
+    } else {
+      console.log('GuidePage - This is not a topic guide');
+      setIsTopicGuide(false);
+    }
+  }, [itemId]);
 
   // Mocks now use localStorage, no 'db' instance needed for doc() here -> Now use real Firestore + db
   const guideDocRef = useCallback(() => {
       if (!tripId || !itemId) return null;
+      
+      // For topic guides accessed through /trip/:tripId/guide/:itemId, 
+      // the content might be in a collection called topic-guides
+      let collectionPath;
+      if (isTopicGuide) {
+        collectionPath = `trips/${tripId}/topic-guides`;
+      } else {
+        collectionPath = `trips/${tripId}/guides`;
+      }
+      
+      console.log('GuidePage - Using collection path:', collectionPath);
+      
       // Use imported 'doc' and 'db'
-      return doc(db, `trips/${tripId}/guides`, itemId);
-  }, [tripId, itemId]);
+      return doc(db, collectionPath, itemId);
+  }, [tripId, itemId, isTopicGuide]);
 
   const itemDocRef = useCallback(() => {
       if (!tripId || !itemId) return null;
@@ -146,41 +181,179 @@ function GuidePage() {
       setError(null);
       setEditMode(false); // Reset edit mode on ID change
 
+      // Check if we already have this content in sessionStorage
+      // to prevent unnecessary loading flashes in production
       try {
-        // Fetch Item Details (for header)
-        const itemRef = itemDocRef();
-        const itemSnap = await getDoc(itemRef); // Uses real getDoc
-        if (itemSnap.exists()) {
-          setItemDetails(itemSnap.data());
+        const cacheKey = `guide_${tripId}_${itemId}_${language}`;
+        const cachedContent = sessionStorage.getItem(cacheKey);
+        const itemDetailsKey = `guide_details_${tripId}_${itemId}`;
+        const cachedDetails = sessionStorage.getItem(itemDetailsKey);
+        
+        // If we have cached content, set it immediately to prevent flash
+        if (cachedContent) {
+          console.log('Setting cached content immediately to prevent flash');
+          setGuideContent(cachedContent);
+          setOriginalContent(cachedContent);
+          
+          if (cachedDetails) {
+            try {
+              setItemDetails(JSON.parse(cachedDetails));
+            } catch (e) {
+              console.warn('Failed to parse cached item details');
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Error accessing sessionStorage:', e);
+      }
+
+      try {
+        // For topic guides, we don't need to fetch item details from wishlist
+        if (isTopicGuide) {
+          // Set item details based on the predefined topics
+          const topicInfo = guideTopics[itemId];
+          if (topicInfo) {
+            const details = {
+              title: `${topicInfo.emoji} ${topicInfo.title}`,
+              region: 'Japan Guide' // Set a generic region name
+            };
+            setItemDetails(details);
+            
+            // Cache item details
+            try {
+              const itemDetailsKey = `guide_details_${tripId}_${itemId}`;
+              sessionStorage.setItem(itemDetailsKey, JSON.stringify(details));
+            } catch (e) {
+              console.warn('Failed to cache item details:', e);
+            }
+          } else {
+            // Fallback if topic not found
+            setItemDetails({ title: `Guide: ${itemId}`, region: 'Japan Guide' });
+          }
         } else {
-          // Wishlist item might legitimately not exist in Firestore
-          console.warn(`Firestore: Wishlist item ${itemId} not found for trip ${tripId}.`);
-          setItemDetails({ title: `Item: ${itemId}`, region: 'Unknown' }); // Fallback title
+          // Fetch Item Details for wishlist item (for header)
+          const itemRef = itemDocRef();
+          try {
+            const itemSnap = await getDoc(itemRef); // Uses real getDoc
+            if (itemSnap.exists()) {
+              const details = itemSnap.data();
+              setItemDetails(details);
+              
+              // Cache item details
+              try {
+                const itemDetailsKey = `guide_details_${tripId}_${itemId}`;
+                sessionStorage.setItem(itemDetailsKey, JSON.stringify(details));
+              } catch (e) {
+                console.warn('Failed to cache item details:', e);
+              }
+            } else {
+              // Wishlist item might legitimately not exist in Firestore
+              console.warn(`Firestore: Wishlist item ${itemId} not found for trip ${tripId}.`);
+              setItemDetails({ title: `Item: ${itemId}`, region: 'Unknown' }); // Fallback title
+            }
+          } catch (itemErr) {
+            console.error("Error fetching wishlist item:", itemErr);
+            setItemDetails({ title: `Item: ${itemId}`, region: 'Unknown' });
+          }
         }
 
         // Fetch Guide Content
+        let docSnap = null;
+        
+        // First try the primary collection path
         const guideRef = guideDocRef();
-        const docSnap = await getDoc(guideRef); // Uses real getDoc
+        console.log('Fetching guide from:', guideRef.path);
+        
+        try {
+          docSnap = await getDoc(guideRef);
+        } catch (err) {
+          console.error("Error fetching from primary path:", err);
+        }
+        
+        // If we're dealing with a topic guide and the document doesn't exist or caused error,
+        // try an alternative collection path as a fallback
+        if (isTopicGuide && (!docSnap || !docSnap.exists())) {
+          try {
+            console.log('Topic guide not found in primary path, trying fallback...');
+            // Try regular guides collection as fallback for topic guides
+            const fallbackRef = doc(db, `trips/${tripId}/guides`, itemId);
+            console.log('Fetching guide from fallback:', fallbackRef.path);
+            const fallbackSnap = await getDoc(fallbackRef);
+            
+            if (fallbackSnap.exists()) {
+              console.log('Found topic guide in fallback location');
+              docSnap = fallbackSnap;
+            }
+          } catch (fallbackErr) {
+            console.error("Error fetching from fallback path:", fallbackErr);
+          }
+        }
 
-        if (docSnap.exists()) {
+        if (docSnap && docSnap.exists()) {
           const data = docSnap.data();
+          console.log('Guide data found:', data);
           // Get content based on current language
           const content = data[language] || '';
           setGuideContent(content);
           setOriginalContent(content);
           // Firestore Timestamps are objects, convert to JS Date if needed
           setLastUpdated(data.lastUpdated?.toDate ? data.lastUpdated.toDate() : null); 
+          
+          // Store in sessionStorage as a backup in case of network issues
+          try {
+            const cacheKey = `guide_${tripId}_${itemId}_${language}`;
+            sessionStorage.setItem(cacheKey, content);
+            console.log('Guide content cached in sessionStorage');
+          } catch (cacheErr) {
+            console.warn('Failed to cache guide content:', cacheErr);
+          }
         } else {
           // No guide exists yet in Firestore
-          setGuideContent('');
-          setOriginalContent('');
+          console.log('No guide content found for', itemId);
+          
+          // Try to get from session storage cache
+          try {
+            const cacheKey = `guide_${tripId}_${itemId}_${language}`;
+            const cachedContent = sessionStorage.getItem(cacheKey);
+            if (cachedContent) {
+              console.log('Retrieved guide content from sessionStorage cache');
+              setGuideContent(cachedContent);
+              setOriginalContent(cachedContent);
+            } else {
+              setGuideContent('');
+              setOriginalContent('');
+            }
+          } catch (cacheErr) {
+            console.warn('Failed to retrieve cached guide content:', cacheErr);
+            setGuideContent('');
+            setOriginalContent('');
+          }
+          
           setLastUpdated(null);
         }
       } catch (err) {
         console.error("Error fetching guide from Firestore:", err);
         setError("Failed to load guide. Please try again.");
-        setGuideContent('');
-        setOriginalContent('');
+        
+        // On error, try to use cached content
+        try {
+          const cacheKey = `guide_${tripId}_${itemId}_${language}`;
+          const cachedContent = sessionStorage.getItem(cacheKey);
+          if (cachedContent) {
+            console.log('Error occurred, falling back to cached content');
+            setGuideContent(cachedContent);
+            setOriginalContent(cachedContent);
+            setError(null); // Clear error if we have cached content
+          } else {
+            setGuideContent('');
+            setOriginalContent('');
+          }
+        } catch (cacheErr) {
+          console.warn('Failed to retrieve cached guide content:', cacheErr);
+          setGuideContent('');
+          setOriginalContent('');
+        }
+        
         setLastUpdated(null);
         setItemDetails(null);
       } finally {
@@ -189,7 +362,7 @@ function GuidePage() {
     };
 
     fetchGuideData();
-  }, [tripId, itemId, language, guideDocRef, itemDocRef]); // Rerun if IDs or language change
+  }, [tripId, itemId, language, guideDocRef, itemDocRef, isTopicGuide, guideTopics]);
 
   const handleEdit = () => {
     setOriginalContent(guideContent); // Store current content in case of cancel
@@ -208,6 +381,8 @@ function GuidePage() {
     setError(null);
 
     try {
+      console.log('Saving guide to:', currentGuideRef.path);
+      
       // Get existing document first to preserve other language content
       const docSnap = await getDoc(currentGuideRef);
       const existingData = docSnap.exists() ? docSnap.data() : {};
@@ -218,9 +393,11 @@ function GuidePage() {
         lastUpdated: serverTimestamp() // Real Firestore serverTimestamp
       }, { merge: true }); 
 
+      console.log('Guide saved successfully');
       setOriginalContent(guideContent); 
       setEditMode(false);
-       // Refetch to get the updated timestamp (which is now a Date object)
+      
+      // Refetch to get the updated timestamp (which is now a Date object)
       const updatedDoc = await getDoc(currentGuideRef);
       if (updatedDoc.exists()) {
            const data = updatedDoc.data();
@@ -247,17 +424,16 @@ function GuidePage() {
     }
   };
 
-  const handleBack = () => {
-    // Navigate back to the previous page in history (likely the wishlist)
-    navigate(-1);
-  };
-
   return (
     <div className="container mt-4 guide-page">
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <button onClick={handleBack} className="btn btn-outline-secondary btn-sm">
-          &larr; Back to Trip
-        </button>
+        <div>
+          {isTopicGuide && (
+            <Link to={`/trip/${tripId}/about`} className="btn btn-sm btn-outline-secondary">
+              Back to Guides
+            </Link>
+          )}
+        </div>
         
         <div className="d-flex gap-2">
           <button 
@@ -287,7 +463,7 @@ function GuidePage() {
 
       {!isLoading && !error && (
         <>
-          <header className="mb-4 text-center">
+          <header className="mb-4 text-left">
             <h1 className="display-6">{itemDetails?.title || 'Guide'}</h1>
             {itemDetails?.region && <p className="text-muted mb-0">Region: {itemDetails.region}</p>}
             {lastUpdated && !editMode && (
@@ -334,7 +510,7 @@ function GuidePage() {
                       <ReactMarkdown>{guideContent}</ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="text-center text-muted fst-italic mt-3">
+                    <p className="text-muted fst-italic mt-3">
                       No guide written yet in {language.toUpperCase()}. Click 'Edit Guide' to start.
                     </p>
                   )}
