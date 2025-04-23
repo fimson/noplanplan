@@ -12,7 +12,6 @@ import PlanWishlistPage from './pages/PlanWishlistPage'
 import BookingsPage from './pages/BookingsPage'
 import GuidePage from './components/GuidePage'
 import AboutJapanPage from './pages/AboutJapanPage'
-import MigrateToFirebase from './components/MigrateToFirebase'
 
 function HeaderWithBackButton() {
   const location = useLocation();
@@ -78,7 +77,6 @@ function App() {
             <Route path="/trip/:tripId/bookings" element={<BookingsPage />} />
             <Route path="/trip/:tripId/about" element={<AboutJapanPage />} />
             <Route path="/trip/:tripId/guide/:itemId" element={<GuidePage />} />
-            <Route path="/migrate" element={<MigrateToFirebase />} />
           </Routes>
         </main>
         

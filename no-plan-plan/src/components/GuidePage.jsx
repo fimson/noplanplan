@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import rehypeExternalLinks from 'rehype-external-links';
 // Assume Firestore is initialized and 'db' is exported from firebase config
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config'; // Adjust path as needed
@@ -12,108 +15,31 @@ const guideTopics = {
   'religion-culture': { title: 'Religion & Culture', emoji: '🧘‍♀️' },
   'modern-japan': { title: 'Modern Japan', emoji: '💸' },
   'etiquette': { title: 'Etiquette & Behavior', emoji: '🍣' },
-  'fun-facts': { title: 'Fun Facts & Family Pre-Reading', emoji: '🧠' }
+  'fun-facts': { title: 'Fun Facts & Family Pre-Reading', emoji: '🧠' },
+  'food': { title: 'Japanese Cuisine', emoji: '🍱' }
 };
 
-// --- LocalStorage Mock Firestore Functions (Replace with actual imports in production) ---
+// Helper: Generate slug ids identical to those used in markdown links
+const slugify = (raw) => {
+  if (!raw) return '';
+  const toPlainText = (node) => {
+    if (typeof node === 'string') return node;
+    if (Array.isArray(node)) return node.map(toPlainText).join('');
+    return ''; // ignore other react elements for slug
+  };
+  const text = toPlainText(raw);
 
-// Helper to simulate Firestore document path as localStorage key
-/*
-const getLocalStorageKey = (docRef) => `firestoreMock/${docRef.path}`;
-
-const doc = (db, collection, id) => ({ 
-    // db is unused in mock, only needed for actual Firestore
-    path: `${collection}/${id}` 
-});
-
-const getDoc = async (docRef) => {
-  const key = getLocalStorageKey(docRef);
-  console.log(`LocalStorage Mock: Getting doc ${key}`);
-  await new Promise(resolve => setTimeout(resolve, 50)); // Simulate short delay
-  const storedValue = localStorage.getItem(key);
-  
-  if (storedValue) {
-      try {
-          const data = JSON.parse(storedValue);
-          // Handle potential stored ISO string dates for lastUpdated
-          if (data.lastUpdated && typeof data.lastUpdated === 'string') {
-              data.lastUpdated = new Date(data.lastUpdated);
-          }
-          return {
-              exists: () => true,
-              data: () => data,
-              id: docRef.path.split('/').pop(), // Extract ID from path
-          };
-      } catch (e) {
-          console.error(`LocalStorage Mock: Error parsing JSON for key ${key}`, e);
-          localStorage.removeItem(key); // Clear corrupted data
-          return { exists: () => false, data: () => undefined, id: docRef.path.split('/').pop() };
-      }
-  } else {
-      return {
-          exists: () => false,
-          data: () => undefined,
-          id: docRef.path.split('/').pop(),
-      };
-  }
+  return text
+    .toLocaleLowerCase()
+    // First replace any whitespace sequence with single hyphen
+    .replace(/\s+/g, '-')
+    // Remove everything except letters (any script), numbers and hyphens
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
+    // Collapse multiple hyphens
+    .replace(/-+/g, '-')
+    // Trim leading/trailing hyphens
+    .replace(/^-+|-+$/g, '');
 };
-
-const setDoc = async (docRef, data, options = {}) => {
-  const key = getLocalStorageKey(docRef);
-  console.log(`LocalStorage Mock: Setting doc ${key}`, data, options);
-  let dataToStore = { ...data };
-
-  // Simulate serverTimestamp with ISO string for localStorage compatibility
-  if (data.lastUpdated === 'SERVER_TIMESTAMP_PLACEHOLDER') {
-      dataToStore.lastUpdated = new Date().toISOString(); 
-  }
-
-  let finalData = dataToStore;
-  if (options.merge) {
-      const existingDoc = await getDoc(docRef);
-      if (existingDoc.exists()) {
-          finalData = { ...existingDoc.data(), ...dataToStore };
-      }
-  }
-
-  try {
-      localStorage.setItem(key, JSON.stringify(finalData));
-  } catch (e) {
-      console.error(`LocalStorage Mock: Error setting item for key ${key}`, e);
-      // Handle potential quota exceeded errors if necessary
-  }
-  await new Promise(resolve => setTimeout(resolve, 50)); // Simulate short delay
-  return Promise.resolve();
-};
-
-// Returns a placeholder string, setDoc handles conversion to ISO string
-const serverTimestamp = () => 'SERVER_TIMESTAMP_PLACEHOLDER'; 
-
-// --- Initialize Mock Data in LocalStorage (if not already present) ---
-const initializeMockData = () => {
-    const shibuyaWishlistKey = getLocalStorageKey(doc(null, 'trips/japan-2025/wishlist', 'shibuya'));
-    const shibuyaGuideKey = getLocalStorageKey(doc(null, 'trips/japan-2025/guides', 'shibuya'));
-    const nikkoWishlistKey = getLocalStorageKey(doc(null, 'trips/japan-2025/wishlist', 'nikko'));
-
-    if (!localStorage.getItem(shibuyaWishlistKey)) {
-        localStorage.setItem(shibuyaWishlistKey, JSON.stringify({ title: 'Tokyo Shibuya', region: 'Tokyo Area' }));
-    }
-    if (!localStorage.getItem(shibuyaGuideKey)) {
-        localStorage.setItem(shibuyaGuideKey, JSON.stringify({ 
-            content: `# Shibuya Guide\n\n*   Visit the crossing!\n*   Explore nearby shops.`,
-            lastUpdated: new Date(Date.now() - 86400000).toISOString() 
-        }));
-    }
-     if (!localStorage.getItem(nikkoWishlistKey)) {
-        localStorage.setItem(nikkoWishlistKey, JSON.stringify({ title: 'Nikko', region: 'Kanto' }));
-    }
-    // No guide initially for Nikko, so no key set for it
-};
-
-initializeMockData(); // Run once on script load
-*/
-// --- End Mock Firestore Functions ---
-
 
 function GuidePage() {
   const { tripId, itemId } = useParams();
@@ -507,7 +433,90 @@ function GuidePage() {
                 <>
                   {guideContent ? (
                     <div className="markdown-content">
-                      <ReactMarkdown>{guideContent}</ReactMarkdown>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ node, ...props }) => {
+                            const { href, children } = props;
+                            console.log("Link rendered:", { href, children });
+                            
+                            if (!href) {
+                              console.log("No href provided for link");
+                              return <a {...props} />;
+                            }
+                            
+                            // External links - don't intercept them
+                            if (href.startsWith('http://') || href.startsWith('https://')) {
+                              console.log("External link detected:", href);
+                              return (
+                                <a 
+                                  href={href} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="external-link"
+                                  onClick={(e) => console.log("External link clicked:", href)}
+                                  {...props} 
+                                />
+                              );
+                            }
+                            
+                            // Anchor/fragment links - handle with direct scrolling
+                            if (href.startsWith('#')) {
+                              console.log("Anchor link detected:", href);
+                              return (
+                                <a 
+                                  href={href}
+                                  className="anchor-link" 
+                                  onClick={(e) => {
+                                    // Don't prevent default, let the browser handle it natively
+                                    console.log("Anchor link clicked, letting browser handle:", href);
+                                  }}
+                                  {...props} 
+                                />
+                              );
+                            }
+                            
+                            // Internal navigation links - use React Router
+                            if (href.startsWith('/')) {
+                              console.log("Internal navigation link detected:", href);
+                              const hrefFinal = href; // Capture href in closure
+                              return (
+                                <Link 
+                                  to={hrefFinal}
+                                  className="internal-link" 
+                                  {...props} 
+                                />
+                              );
+                            }
+                            
+                            // Default case - render as normal anchor
+                            console.log("Default link handling for:", href);
+                            return <a href={href} className="default-link" {...props} />;
+                          },
+                          h1: ({ node, ...props }) => {
+                            const id = slugify(props.children);
+                            return <h1 id={id} {...props} />;
+                          },
+                          h2: ({ node, ...props }) => {
+                            const id = slugify(props.children);
+                            return <h2 id={id} {...props} />;
+                          },
+                          h3: ({ node, ...props }) => {
+                            const id = slugify(props.children);
+                            return <h3 id={id} {...props} />;
+                          },
+                          h4: ({ node, ...props }) => {
+                            const id = slugify(props.children);
+                            return <h4 id={id} {...props} />;
+                          }
+                        }}
+                        rehypePlugins={[
+                          rehypeRaw,
+                          [rehypeExternalLinks, { target: '_blank', rel: ['nofollow', 'noreferrer'] }]
+                        ]}
+                      >
+                        {guideContent}
+                      </ReactMarkdown>
                     </div>
                   ) : (
                     <p className="text-muted fst-italic mt-3">

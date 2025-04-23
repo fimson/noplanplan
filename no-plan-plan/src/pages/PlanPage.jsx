@@ -335,7 +335,7 @@ function PlanPage() {
                   <div className="card feature-card bookings-card">
                     <div className="card-body text-center py-4">
                       <div className="feature-icon mb-2">🎫</div>
-                      <h3 className="card-title feature-title">Logistics</h3>
+                      <h3 className="card-title feature-title">Trip Logistics</h3>
                       <p className="card-text feature-text">Track flights, hotels, and reservations</p>
                     </div>
                   </div>

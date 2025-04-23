@@ -22,7 +22,7 @@ function PlanWishlistPage() {
               Overview
             </Link>
             <Link to={`/trip/${tripId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
-              Bookings
+              Trip Logistics
             </Link>
             <Link to={`/trip/${tripId}/planning`} className="btn btn-sm btn-outline-secondary">
               Planning

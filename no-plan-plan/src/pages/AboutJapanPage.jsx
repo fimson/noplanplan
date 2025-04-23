@@ -33,6 +33,12 @@ const guideTopics = [
     title: 'Fun Facts & Family',
     emoji: '🧠',
     description: 'Fascinating tidbits that will make the kids think you\'re smart.'
+  },
+  {
+    id: 'food',
+    title: 'Japanese Cuisine',
+    emoji: '🍱',
+    description: 'Discover the rich flavors and traditions of Japanese food.'
   }
 ];
 

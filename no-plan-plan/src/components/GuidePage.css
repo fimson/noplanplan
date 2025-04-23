@@ -80,8 +80,13 @@
 }
 
 .guide-page .markdown-content a {
-  color: #3b82f6;
+  color: #87ceeb; /* Sky blue links */
   text-decoration: none;
+  position: relative;
+  z-index: 5;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  display: inline-block;
 }
 
 .guide-page .markdown-content a:hover {
@@ -163,15 +168,6 @@
   margin-left: 0;
   margin-bottom: 1em;
   font-style: italic;
-}
-
-.markdown-content a {
-  color: #87ceeb; /* Sky blue links */
-  text-decoration: none;
-}
-
-.markdown-content a:hover {
-  text-decoration: underline;
 }
 
 .markdown-content hr {

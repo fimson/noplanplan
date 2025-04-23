@@ -956,15 +956,23 @@ function Wishlist({ planId, onAddToPlanning }) {
             
             {planId && (
               <div className="d-grid">
-                <form onSubmit={(e) => handleCardAddToPlan(item, e)}>
-                  <button
-                    type="submit"
-                    className="btn btn-sm btn-outline-success w-100"
-                    disabled={item.planned && !onAddToPlanning}
+                {item.planned && !onAddToPlanning ? (
+                  <Link 
+                    to={`/trip/${planId}/planning`}
+                    className="btn btn-sm btn-success w-100"
                   >
-                    {item.planned && !onAddToPlanning ? 'Added to Plan' : 'Add to Plan'}
-                  </button>
-                </form>
+                    Added to Plan
+                  </Link>
+                ) : (
+                  <form onSubmit={(e) => handleCardAddToPlan(item, e)}>
+                    <button
+                      type="submit"
+                      className="btn btn-sm btn-outline-success w-100"
+                    >
+                      Add to Plan
+                    </button>
+                  </form>
+                )}
               </div>
             )}
           </div>

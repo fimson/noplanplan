@@ -63,8 +63,6 @@ function PlanningPage() {
   const [showAddFromWishlist, setShowAddFromWishlist] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
   const [showDayModal, setShowDayModal] = useState(false);
-  const [showWishlistItemModal, setShowWishlistItemModal] = useState(false);
-  const [selectedWishlistItem, setSelectedWishlistItem] = useState(null);
   
   // Fetch plan details and activities from Firestore
   useEffect(() => {
@@ -527,26 +525,11 @@ function PlanningPage() {
     }
   };
   
-  // Get wishlist item details and show modal
-  const showWishlistItemDetails = async (wishlistItemId) => {
-    if (!wishlistItemId || !tripId) return;
-    
-    try {
-      // Fetch the wishlist item from Firestore
-      const itemDoc = await getDoc(doc(db, `trips/${tripId}/wishlist`, wishlistItemId));
-      
-      if (itemDoc.exists()) {
-        const itemData = itemDoc.data();
-        setSelectedWishlistItem({
-          id: wishlistItemId,
-          ...itemData
-        });
-        setShowWishlistItemModal(true);
-      } else {
-        console.error("Wishlist item not found");
-      }
-    } catch (error) {
-      console.error("Error fetching wishlist item:", error);
+  // Navigate to wishlist page when clicking on an activity with wishlistItemId
+  const handleActivityClick = (activity) => {
+    if (activity && activity.wishlistItemId && tripId) {
+      // Navigate to the wishlist page
+      window.location.href = `/trip/${tripId}/wishlist`;
     }
   };
   
@@ -651,7 +634,7 @@ function PlanningPage() {
               Overview
             </Link>
             <Link to={`/trip/${tripId}/bookings`} className="btn btn-sm btn-outline-secondary me-2">
-              Bookings
+              Trip Logistics
             </Link>
             <Link to={`/trip/${tripId}/wishlist`} className="btn btn-sm btn-outline-secondary">
               Wishlist
@@ -866,7 +849,11 @@ function PlanningPage() {
                                   <span className="activity-icon">📋</span> Activities
                                 </h6>
                                 
-                                <div className="activity-item">
+                                <div 
+                                  className={`activity-item ${firstActivity.wishlistItemId ? 'activity-with-wishlist' : ''}`}
+                                  onClick={() => firstActivity.wishlistItemId && handleActivityClick(firstActivity)}
+                                  style={{ cursor: firstActivity.wishlistItemId ? 'pointer' : 'default' }}
+                                >
                                   <p className="card-text activity-title">
                                     <span className="activity-icon me-1">{getActivityIcon(firstActivity.title)}</span>
                                     <strong>{firstActivity.title}</strong>
@@ -1084,17 +1071,12 @@ function PlanningPage() {
                         <div key={activity.id} className="card mb-3">
                           <div 
                             className={`card-body ${activity.wishlistItemId ? 'activity-with-wishlist' : ''}`} 
-                            onClick={() => activity.wishlistItemId && showWishlistItemDetails(activity.wishlistItemId)}
+                            onClick={() => activity.wishlistItemId && handleActivityClick(activity)}
                           >
                             <div className="d-flex justify-content-between align-items-center">
                               <h5 className="card-title mb-0">
                                 <span className="activity-icon me-2">{getActivityIcon(activity.title)}</span>
                                 {activity.title}
-                                {activity.wishlistItemId && (
-                                  <span className="badge bg-info ms-2" title="From wishlist">
-                                    <small>💭</small>
-                                  </span>
-                                )}
                               </h5>
                               <div>
                                 {activity.startTime && (
@@ -1135,12 +1117,6 @@ function PlanningPage() {
                                 Delete
                               </button>
                             </div>
-                            
-                            {activity.wishlistItemId && (
-                              <div className="view-wishlist-hint mt-2">
-                                <small>Click to view wishlist details</small>
-                              </div>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -1184,73 +1160,6 @@ function PlanningPage() {
               setShowAddFromWishlist(false);
             }} 
           />
-        </CustomModal>
-      )}
-
-      {/* Wishlist Item Details Modal */}
-      {showWishlistItemModal && selectedWishlistItem && (
-        <CustomModal
-          isOpen={showWishlistItemModal}
-          onClose={() => setShowWishlistItemModal(false)}
-          title="Wishlist Item Details"
-          size="lg"
-          footer={
-            <button 
-              className="btn btn-secondary" 
-              onClick={() => setShowWishlistItemModal(false)}
-            >
-              Close
-            </button>
-          }
-        >
-          <div className="wishlist-item-details">
-            <h4 className="mb-3">{selectedWishlistItem.title}</h4>
-            
-            {selectedWishlistItem.imageUrl && (
-              <div className="wishlist-image-container mb-3">
-                <img 
-                  src={selectedWishlistItem.imageUrl} 
-                  alt={selectedWishlistItem.title} 
-                  className="wishlist-image"
-                />
-              </div>
-            )}
-            
-            {selectedWishlistItem.description && (
-              <div className="description-section mb-3">
-                <h6 className="text-muted mb-2">Description</h6>
-                <p>{selectedWishlistItem.description}</p>
-              </div>
-            )}
-            
-            {selectedWishlistItem.notes && (
-              <div className="notes-section mb-3">
-                <h6 className="text-muted mb-2">Notes</h6>
-                <p>{selectedWishlistItem.notes}</p>
-              </div>
-            )}
-            
-            {selectedWishlistItem.location && (
-              <div className="location-section mb-3">
-                <h6 className="text-muted mb-2">Location</h6>
-                <p className="text-info">📍 {selectedWishlistItem.location}</p>
-              </div>
-            )}
-            
-            {selectedWishlistItem.link && (
-              <div className="link-section mb-3">
-                <h6 className="text-muted mb-2">Link</h6>
-                <a 
-                  href={selectedWishlistItem.link} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="btn btn-sm btn-outline-info"
-                >
-                  Visit Website
-                </a>
-              </div>
-            )}
-          </div>
         </CustomModal>
       )}
 
@@ -1478,12 +1387,12 @@ function PlanningPage() {
         }
         
         .weekend .card {
-          background-color: rgba(52, 58, 64, 0.5);
+          /* Same as regular days - no special background */
         }
         
         .weekend .card-header {
-          background-color: rgba(73, 80, 87, 0.5);
-          border-bottom-color: rgba(73, 80, 87, 0.3);
+          background-color: rgba(59, 130, 246, 0.3);
+          border-bottom-color: rgba(59, 130, 246, 0.2);
         }
         
         /* Icon button styling */

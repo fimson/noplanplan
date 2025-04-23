@@ -24,6 +24,27 @@ function BookingsPage() {
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [successMessage, setSuccessMessage] = useState('');
+  const [travelDocs, setTravelDocs] = useState([]);
+  const [uploadingTravelDoc, setUploadingTravelDoc] = useState(false);
+  const [travelDocProgress, setTravelDocProgress] = useState(0);
+
+  // Guide topics for transportation
+  const transportGuides = [
+    {
+      id: 'transportation',
+      title: 'Transportation Guide',
+      emoji: '🚅',
+      description: 'Tips for navigating local transportation, tickets, and getting around.'
+    }
+  ];
+
+  // Set page title
+  useEffect(() => {
+    document.title = 'Trip Logistics';
+    return () => {
+      document.title = 'NoPlanPlan';
+    };
+  }, []);
 
   // Fetch bookings from Firestore
   useEffect(() => {
@@ -95,6 +116,37 @@ function BookingsPage() {
     };
     
     fetchDocuments();
+  }, [tripId]);
+
+  // Fetch travel documents from Firebase Storage
+  useEffect(() => {
+    const fetchTravelDocs = async () => {
+      if (!tripId) return;
+      
+      try {
+        const travelDocsRef = ref(storage, `trips/${tripId}/travel-documents`);
+        const travelDocsList = await listAll(travelDocsRef);
+        
+        const travelDocsData = await Promise.all(travelDocsList.items.map(async (item) => {
+          const url = await getDownloadURL(item);
+          return {
+            id: item.name,
+            name: item.name,
+            url,
+            fullPath: item.fullPath
+          };
+        }));
+        
+        setTravelDocs(travelDocsData);
+      } catch (err) {
+        // If the folder doesn't exist yet, this is normal
+        if (!err.message.includes('storage/object-not-found')) {
+          console.error("Error fetching travel documents:", err);
+        }
+      }
+    };
+    
+    fetchTravelDocs();
   }, [tripId]);
 
   // Get icon for booking type
@@ -326,10 +378,81 @@ function BookingsPage() {
     return documents.filter(doc => doc.bookingId === bookingId);
   };
 
+  // Handle travel document upload
+  const handleTravelDocUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setUploadingTravelDoc(true);
+    setTravelDocProgress(0);
+    setSuccessMessage('');
+    
+    try {
+      // Create a reference to the file in Firebase Storage
+      const storageRef = ref(storage, `trips/${tripId}/travel-documents/${file.name}`);
+      
+      // Create upload task
+      const uploadTask = uploadBytes(storageRef, file);
+      
+      // Simulated progress
+      const progressInterval = setInterval(() => {
+        setTravelDocProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+      
+      // Wait for upload to complete
+      await uploadTask;
+      clearInterval(progressInterval);
+      setTravelDocProgress(100);
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      // Add to local state
+      const newDoc = {
+        id: file.name,
+        name: file.name,
+        url: downloadURL,
+        fullPath: storageRef.fullPath
+      };
+      
+      setTravelDocs(prev => [...prev, newDoc]);
+      
+      // Set success message
+      setSuccessMessage(`Travel document "${file.name}" uploaded successfully!`);
+      setTimeout(() => setSuccessMessage(''), 5000); // Clear after 5 seconds
+    } catch (err) {
+      console.error("Error uploading travel document:", err);
+      alert(`Failed to upload document: ${err.message}`);
+    } finally {
+      setUploadingTravelDoc(false);
+    }
+  };
+
+  // Delete a travel document
+  const handleDeleteTravelDoc = async (document) => {
+    try {
+      // Delete from Firebase Storage
+      const docRef = ref(storage, document.fullPath);
+      await deleteObject(docRef);
+      
+      // Update local state
+      setTravelDocs(travelDocs.filter(doc => doc.id !== document.id));
+    } catch (err) {
+      console.error("Error deleting travel document:", err);
+      alert("Failed to delete document. Please try again.");
+    }
+  };
+
   return (
     <div className="bookings-page text-center">
       <div className="d-flex justify-content-center align-items-center mb-4 flex-column">
-        <h2 className="fw-bold main-title mb-3">Travel Bookings</h2>
+        <h2 className="fw-bold main-title mb-3">Trip Logistics</h2>
         <div className="d-flex gap-3 mb-4">
           <Link to={`/trip/${tripId}`} className="btn btn-sm btn-outline-secondary">
             Overview
@@ -346,6 +469,104 @@ function BookingsPage() {
       {error && <div className="alert alert-danger">{error}</div>}
       {successMessage && <div className="alert alert-success">{successMessage}</div>}
       {isLoading && <div className="text-center"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div></div>}
+
+      {/* Guides Section */}
+      <div className="container mt-4 mb-5">
+        <div className="card mx-auto mb-4" style={{ maxWidth: '900px' }}>
+          <div className="card-body">
+            <h5 className="card-title mb-4">Travel Guides</h5>
+            <div className="row g-4">
+              {transportGuides.map((guide) => (
+                <div className="col-md-6 col-lg-4 mx-auto" key={guide.id}>
+                  <Link 
+                    to={`/trip/${tripId}/guide/${guide.id}`} 
+                    className="text-decoration-none"
+                  >
+                    <div className="card h-100 bg-dark border-secondary shadow-sm">
+                      <div className="card-body d-flex flex-column">
+                        <h3 className="card-title d-flex align-items-center mb-3 text-white">
+                          <span className="me-2 fs-4">{guide.emoji}</span> {guide.title}
+                        </h3>
+                        <p className="card-text text-light opacity-75 mb-3">
+                          {guide.description}
+                        </p>
+                        <div className="mt-auto text-end">
+                          <span className="text-primary fw-medium small">Read more →</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Travel Documents Section */}
+      <div className="card mx-auto mb-4" style={{ maxWidth: '900px' }}>
+        <div className="card-body">
+          <h5 className="card-title mb-4">Travel Documents</h5>
+          
+          <div className="mb-4">
+            <p className="text-muted">Upload important travel documents like passports, visas, or insurance information</p>
+            <div className="mb-3">
+              <input 
+                type="file" 
+                className="form-control" 
+                onChange={handleTravelDocUpload}
+                disabled={uploadingTravelDoc}
+              />
+              {uploadingTravelDoc && (
+                <div className="progress mt-2" style={{ height: '5px' }}>
+                  <div 
+                    className="progress-bar" 
+                    role="progressbar" 
+                    style={{ width: `${travelDocProgress}%` }} 
+                    aria-valuenow={travelDocProgress} 
+                    aria-valuemin="0" 
+                    aria-valuemax="100"
+                  ></div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {travelDocs.length > 0 ? (
+            <div className="row g-3">
+              {travelDocs.map(doc => (
+                <div key={doc.id} className="col-md-4">
+                  <div className="card h-100 bg-dark border-secondary">
+                    <div className="card-body">
+                      <h6 className="card-title text-truncate">📄 {doc.name}</h6>
+                      <div className="d-flex justify-content-between mt-3">
+                        <a 
+                          href={doc.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="btn btn-sm btn-outline-info"
+                        >
+                          View
+                        </a>
+                        <button 
+                          className="btn btn-sm btn-outline-danger" 
+                          onClick={() => handleDeleteTravelDoc(doc)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="alert alert-info">
+              No travel documents uploaded yet.
+            </div>
+          )}
+        </div>
+      </div>
 
       {showForm && (
         <div className="card bg-dark mb-4 mx-auto" style={{ maxWidth: '700px' }}>
