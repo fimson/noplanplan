@@ -3,50 +3,40 @@ import { useParams, Link } from 'react-router-dom';
 import RegionManager from '/src/components/RegionManager.jsx';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase-config';
+import useTripConfig from '../hooks/useTripConfig';
+import countryToEmoji from 'country-to-emoji-flag';
 
 function PlanPage() {
   const { tripId } = useParams();
+  // Load trip configuration (title, tagline, flag, defaults, etc.)
+  const { config: tripConfig, isLoading: configLoading } = useTripConfig(tripId);
   
   const [plan, setPlan] = useState({
     id: tripId,
-    title: tripId === 'japan-2025' ? 'Japan Trip 2025' : 'Iceland 2026',
-    description: tripId === 'japan-2025' 
-      ? 'Celebrating Yoki\'s birthday in the land of the rising sun' 
-      : 'Experience the adventure',
-    image: tripId === 'japan-2025'
-      ? 'https://www.thetrainline.com/cmsmedia/cms/7709/japan_2x.jpg'
-      : 'https://media.cntraveler.com/photos/60748e5ed1058698d13c31ee/16:9/w_1920%2Cc_limit/Vatnajokull-Iceland-GettyImages-655074449.jpg',
+    title: '',
+    description: '',
+    image: '',
+    countryCode: '',
     startDate: '',
     endDate: '',
     budget: '',
-    notes: ''
+    notes: '',
+    flagEmoji: '',
+    tagline: ''
   });
   
   // Get appropriate flag for the plan
-  const getTripFlag = () => {
-    if (tripId === 'japan-2025') return '🇯🇵';
-    if (tripId === 'iceland-2026') return '🇮🇸';
-    return '🌍';
-  };
+  const getTripFlag = () => plan.flagEmoji || '🌍';
 
   // Get appropriate tagline for the plan
-  const getTripTagline = () => {
-    if (tripId === 'japan-2025') 
-      return "Yoki's birthday bash in the land of cherry blossoms";
-    if (tripId === 'iceland-2026')
-      return "Northern lights and epic landscapes";
-    return "Your adventure awaits";
-  };
+  const getTripTagline = () => plan.tagline || 'Your adventure awaits';
   
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({...plan});
   const [isLoading, setIsLoading] = useState(true);
   
-  // Define default regions
-  const defaultRegions = [
-    { id: 'tokyo-region', name: 'Tokyo Area', notes: 'Central Hub' },
-    { id: 'kyoto-region', name: 'Kyoto Region', notes: 'Cultural Heart' }
-  ];
+  // Default regions from config (fallback empty array)
+  const defaultRegions = tripConfig?.defaultRegions || [];
   
   const [regions, setRegions] = useState([]);
 
@@ -69,20 +59,26 @@ function PlanPage() {
             title: tripData.title || plan.title,
             description: tripData.description || plan.description,
             image: tripData.image || plan.image,
+            countryCode: tripData.countryCode || '',
             startDate: tripData.startDate || '',
             endDate: tripData.endDate || '',
             budget: tripData.budget || '',
-            notes: tripData.notes || ''
+            notes: tripData.notes || '',
+            flagEmoji: tripData.flagEmoji || '',
+            tagline: tripData.tagline || ''
           });
           setEditForm({
             id: tripId,
             title: tripData.title || plan.title,
             description: tripData.description || plan.description,
             image: tripData.image || plan.image,
+            countryCode: tripData.countryCode || '',
             startDate: tripData.startDate || '',
             endDate: tripData.endDate || '',
             budget: tripData.budget || '',
-            notes: tripData.notes || ''
+            notes: tripData.notes || '',
+            flagEmoji: tripData.flagEmoji || '',
+            tagline: tripData.tagline || ''
           });
         } else {
           // If the trip doesn't exist in Firestore yet, create it with default values
@@ -90,6 +86,10 @@ function PlanPage() {
             title: plan.title,
             description: plan.description,
             image: plan.image,
+            countryCode: plan.countryCode,
+            flagEmoji: plan.flagEmoji,
+            tagline: plan.tagline,
+            topicGuides: [],
             createdAt: new Date(),
             lastUpdated: new Date()
           });
@@ -108,8 +108,8 @@ function PlanPage() {
           });
         });
         
-        // If no regions were found, create default regions in Firestore
-        if (fetchedRegions.length === 0 && tripId === 'japan-2025') {
+        // If no regions were found, create default regions from config (if any)
+        if (fetchedRegions.length === 0 && defaultRegions.length > 0) {
           // Add default regions to Firestore
           for (const region of defaultRegions) {
             await setDoc(doc(db, `trips/${tripId}/regions`, region.id), {
@@ -131,6 +131,30 @@ function PlanPage() {
     fetchPlanAndRegions();
   }, [tripId]);
 
+  // When tripConfig loads, update local plan state defaults if not yet set
+  useEffect(() => {
+    if (tripConfig) {
+      setPlan((prev) => ({
+        ...prev,
+        title: prev.title || tripConfig.title,
+        description: prev.description || tripConfig.description,
+        image: prev.image || tripConfig.heroImage,
+        countryCode: prev.countryCode || tripConfig.countryCode,
+        flagEmoji: prev.flagEmoji || tripConfig.flagEmoji,
+        tagline: prev.tagline || tripConfig.tagline,
+      }));
+      setEditForm((prev) => ({
+        ...prev,
+        title: prev.title || tripConfig.title,
+        description: prev.description || tripConfig.description,
+        image: prev.image || tripConfig.heroImage,
+        countryCode: prev.countryCode || tripConfig.countryCode,
+        flagEmoji: prev.flagEmoji || tripConfig.flagEmoji,
+        tagline: prev.tagline || tripConfig.tagline,
+      }));
+    }
+  }, [tripConfig]);
+
   const handleSaveChanges = async () => {
     if (!tripId) return;
     
@@ -142,6 +166,9 @@ function PlanPage() {
         title: editForm.title,
         description: editForm.description,
         image: editForm.image,
+        countryCode: editForm.countryCode,
+        flagEmoji: editForm.flagEmoji,
+        tagline: editForm.tagline,
         budget: editForm.budget,
         notes: editForm.notes,
         lastUpdated: new Date()
@@ -167,7 +194,7 @@ function PlanPage() {
         <p className="trip-tagline">{getTripTagline()}</p>
       </div>
       
-      {isLoading && (
+      {(isLoading || configLoading) && (
         <div className="text-center my-5">
           <div className="spinner-border" role="status">
             <span className="visually-hidden">Loading...</span>
@@ -199,6 +226,42 @@ function PlanPage() {
                   value={editForm.image}
                   onChange={(e) => setEditForm({...editForm, image: e.target.value})}
                 />
+              </div>
+              <div className="col-md-6">
+                <label htmlFor="tagline" className="form-label">Tagline</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  id="tagline"
+                  value={editForm.tagline || ''}
+                  onChange={(e) => setEditForm({...editForm, tagline: e.target.value})}
+                />
+              </div>
+              <div className="col-md-6">
+                <label htmlFor="countryCode" className="form-label">Country Code (2 letters)</label>
+                <div className="d-flex align-items-center">
+                  <input
+                    type="text"
+                    className="form-control me-2"
+                    id="countryCode"
+                    value={editForm.countryCode || ''}
+                    onChange={(e) => {
+                      const inputVal = e.target.value;
+                      const code = inputVal.toUpperCase();
+                      let emoji = '';
+                      if (code.length === 2) {
+                        // Only lookup emoji if we have 2 letters
+                        emoji = countryToEmoji(code) || '❓'; // Show question mark if invalid 2-letter code
+                      }
+                      // Update state with the code (max 2 chars) and derived emoji
+                      setEditForm({...editForm, countryCode: code, flagEmoji: emoji });
+                    }}
+                    maxLength="2" // Restore maxLength
+                    style={{ textTransform: 'uppercase', width: '80px' }} // Restore style
+                    placeholder="e.g., JP"
+                  />
+                  {editForm.flagEmoji && <span style={{ fontSize: '1.5rem' }}>{editForm.flagEmoji}</span>}
+                </div>
               </div>
               <div className="col-md-12">
                 <label htmlFor="description" className="form-label">Description</label>
@@ -292,16 +355,16 @@ function PlanPage() {
             </div>
           )}
           
-          {/* "About Japan" Card */}
-          {tripId === 'japan-2025' && (
+          {/* "About Trip" Card (shown if topic guides exist in config) */}
+          {!configLoading && tripConfig && (
             <div className="col-md-10 mt-4">
               <Link to={`/trip/${tripId}/about`} className="text-decoration-none">
                 <div className="card about-card mb-4">
                   <div className="card-body d-flex align-items-center">
                     <div className="about-icon me-3">📘</div>
                     <div className="flex-grow-1">
-                      <h3 className="about-title mb-1">About Japan</h3>
-                      <p className="about-text mb-2">History, culture, etiquette — everything to brief your brain before your boarding pass.</p>
+                      <h3 className="about-title mb-1">Know Before You Go</h3>
+                      <p className="about-text mb-2">Get smart on history, culture, etiquette, and the little things that make a big difference once you land.</p>
                       <div className="text-end">
                         <span className="about-cta">Explore topics →</span>
                       </div>

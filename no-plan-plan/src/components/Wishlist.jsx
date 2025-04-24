@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase-config';
+import useTripConfig from '../hooks/useTripConfig';
 
 function Wishlist({ planId, onAddToPlanning }) {
   const navigate = useNavigate();
+  const { config: tripConfig, isLoading: configLoading } = useTripConfig(planId);
   
   // Debug on mount
   useEffect(() => {
@@ -65,98 +67,22 @@ function Wishlist({ planId, onAddToPlanning }) {
         // Sort items by createdAt date (newest first)
         fetchedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
-        // If there are no items, use sample data for this trip
-        if (fetchedItems.length === 0 && planId === 'japan-2025') {
-    initialItems = [
-      {
-        id: 'nikko',
-        title: "Nikko",
-        votes: 0,
-        link: "https://www.japan-guide.com/e/e3800.html",
-        imageUrl: "https://www.2aussietravellers.com/wp-content/uploads/2018/07/Shinkyo-Bridge-in-Nikko-2.jpg",
-        description: "Shrines and waterfalls",
-        createdAt: new Date().toISOString(),
-        planned: false,
-              regionId: 'region0'
-      },
-      {
-        id: 'shibuya',
-        title: "Tokyo Shibuya",
-        votes: 2,
-        link: "https://www.japan-guide.com/e/e3007.html",
-        imageUrl: "https://assets.vogue.com/photos/659db809e0e9934642099815/16:9/w_6000,h_3375,c_limit/1189690204",
-        description: "Shibuya Crossing",
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        planned: false,
-              regionId: 'region0'
-            }
-          ];
+        // If there are no items, seed with sample wishlist from tripConfig
+        if (fetchedItems.length === 0 && tripConfig?.sampleWishlist?.length > 0) {
+          initialItems = tripConfig.sampleWishlist.map((item) => ({
+            ...item,
+            createdAt: new Date().toISOString(),
+            planned: false,
+          }));
           
           // Save sample data to Firestore with error handling
           try {
             for (const item of initialItems) {
-              await setDoc(doc(db, `trips/${planId}/wishlist`, item.id), {
-                title: item.title,
-                votes: item.votes,
-                link: item.link,
-                imageUrl: item.imageUrl,
-                description: item.description,
-                createdAt: new Date(item.createdAt),
-                planned: item.planned,
-                regionId: item.regionId
-              });
+              await setDoc(doc(db, `trips/${planId}/wishlist`, item.id), item);
             }
           } catch (saveError) {
             console.error("Error saving sample data to Firestore:", saveError);
-            // Continue with local data despite Firestore failure
           }
-          
-          setItems(initialItems);
-        } else if (fetchedItems.length === 0 && planId === 'iceland-2026') {
-    initialItems = [
-      {
-        id: 'eiffel-tower',
-        title: "Eiffel Tower",
-        votes: 3,
-        link: "https://www.toureiffel.paris/en",
-        imageUrl: "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?q=80&w=1000&auto=format&fit=crop",
-        description: "Iconic iron tower in Paris",
-        createdAt: new Date().toISOString(),
-        planned: false,
-              regionId: 'region0'
-      },
-      {
-        id: 'colosseum',
-        title: "Colosseum",
-        votes: 5,
-        link: "https://www.rome.net/colosseum",
-        imageUrl: "https://images.unsplash.com/photo-1552432552-06c0b0a94dda?q=80&w=1000&auto=format&fit=crop",
-        description: "Ancient Roman amphitheater",
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        planned: false,
-              regionId: 'region1'
-            }
-          ];
-          
-          // Save sample data to Firestore with error handling
-          try {
-            for (const item of initialItems) {
-              await setDoc(doc(db, `trips/${planId}/wishlist`, item.id), {
-                title: item.title,
-                votes: item.votes,
-                link: item.link,
-                imageUrl: item.imageUrl,
-                description: item.description,
-                createdAt: new Date(item.createdAt),
-                planned: item.planned,
-                regionId: item.regionId
-              });
-            }
-          } catch (saveError) {
-            console.error("Error saving sample data to Firestore:", saveError);
-            // Continue with local data despite Firestore failure
-          }
-          
           setItems(initialItems);
         } else {
           setItems(fetchedItems);
@@ -172,21 +98,8 @@ function Wishlist({ planId, onAddToPlanning }) {
             console.log("Using cached wishlist data from localStorage due to Firestore error");
           } else {
             // If no localStorage data, use empty array or default samples
-            if (planId === 'japan-2025') {
-              setItems([
-                {
-                  id: 'nikko',
-                  title: "Nikko",
-                  votes: 0,
-                  link: "https://www.japan-guide.com/e/e3800.html",
-                  imageUrl: "https://www.2aussietravellers.com/wp-content/uploads/2018/07/Shinkyo-Bridge-in-Nikko-2.jpg",
-                  description: "Shrines and waterfalls",
-                  createdAt: new Date().toISOString(),
-                  planned: false,
-                  regionId: 'region0'
-                },
-                // Add other default items as needed
-              ]);
+            if (tripConfig?.sampleWishlist?.length > 0) {
+              setItems(tripConfig.sampleWishlist);
             } else {
               setItems([]);
             }
@@ -201,7 +114,7 @@ function Wishlist({ planId, onAddToPlanning }) {
     };
     
     fetchItems();
-  }, [planId]);
+  }, [planId, tripConfig]);
 
   // Fetch regions from Firestore
   useEffect(() => {
@@ -225,51 +138,19 @@ function Wishlist({ planId, onAddToPlanning }) {
         });
         
         // If no regions found for the trip, add default regions
-        if (fetchedRegions.length === 0) {
-          if (planId === 'japan-2025') {
-            // Default regions for Japan trip
-            const defaultRegions = [
-              { id: 'region0', name: 'Tokyo Area', notes: 'Capital city and surroundings' },
-              { id: 'kyoto-region', name: 'Kyoto Region', notes: 'Traditional Japan' },
-              { id: 'osaka-region', name: 'Osaka', notes: 'Food and culture' }
-            ];
-            
-            // Save these default regions to Firestore
-            try {
-              for (const region of defaultRegions) {
-                await setDoc(doc(db, `trips/${planId}/regions`, region.id), {
-                  name: region.name,
-                  notes: region.notes,
-                  createdAt: new Date()
-                });
-              }
-              console.log(`Created default regions for trip ${planId}`);
-              fetchedRegions.push(...defaultRegions);
-            } catch (saveError) {
-              console.error("Error saving default regions to Firestore:", saveError);
+        if (fetchedRegions.length === 0 && tripConfig?.defaultRegions?.length > 0) {
+          const defaultRegions = tripConfig.defaultRegions;
+          try {
+            for (const region of defaultRegions) {
+              await setDoc(doc(db, `trips/${planId}/regions`, region.id), {
+                name: region.name,
+                notes: region.notes,
+                createdAt: new Date()
+              });
             }
-          } else if (planId === 'iceland-2026') {
-            // Default regions for Iceland trip
-            const defaultRegions = [
-              { id: 'region0', name: 'Reykjavik', notes: 'Capital city' },
-              { id: 'region1', name: 'Golden Circle', notes: 'Popular tourist route' },
-              { id: 'south-region', name: 'South Coast', notes: 'Scenic coastal area' }
-            ];
-            
-            // Save these default regions to Firestore
-            try {
-              for (const region of defaultRegions) {
-                await setDoc(doc(db, `trips/${planId}/regions`, region.id), {
-                  name: region.name,
-                  notes: region.notes,
-                  createdAt: new Date()
-                });
-              }
-              console.log(`Created default regions for trip ${planId}`);
-              fetchedRegions.push(...defaultRegions);
-            } catch (saveError) {
-              console.error("Error saving default regions to Firestore:", saveError);
-            }
+            fetchedRegions.push(...defaultRegions);
+          } catch (saveError) {
+            console.error("Error saving default regions to Firestore:", saveError);
           }
         }
         
@@ -329,7 +210,7 @@ function Wishlist({ planId, onAddToPlanning }) {
     };
     
     fetchRegions();
-  }, [planId]);
+  }, [planId, tripConfig]);
 
   // Group items by region
   const getItemsByRegion = () => {

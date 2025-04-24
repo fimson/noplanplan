@@ -4,35 +4,19 @@ import Wishlist from '../components/Wishlist';
 import CustomModal from '../components/CustomModal';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase-config';
+import useTripConfig from '../hooks/useTripConfig';
 
 function PlanningPage() {
   const { tripId } = useParams();
-  
-  // Default dates for trips
-  const getDefaultDates = () => {
-    if (tripId === 'japan-2025') {
-      return {
-        startDate: '2025-06-26',
-        endDate: '2025-07-11'
-      };
-    } else if (tripId === 'iceland-2026') {
-      return {
-        startDate: '2026-07-15',
-        endDate: '2026-07-25'
-      };
-    }
-    return {
-      startDate: '',
-      endDate: ''
-    };
+  const { config: tripConfig, isLoading: configLoading } = useTripConfig(tripId);
+  const defaultDates = {
+    startDate: tripConfig?.defaultStartDate || '',
+    endDate: tripConfig?.defaultEndDate || '',
   };
-  
-  const defaultDates = getDefaultDates();
   
   const [planDetails, setPlanDetails] = useState({
     id: tripId,
-    title: tripId === 'japan-2025' ? 'Japan Trip 2025' : 
-           tripId === 'iceland-2026' ? 'Iceland 2026' : 'Travel Plan',
+    title: tripConfig?.title || 'Travel Plan',
     startDate: defaultDates.startDate,
     endDate: defaultDates.endDate,
     budget: '',
@@ -66,7 +50,7 @@ function PlanningPage() {
   
   // Fetch plan details and activities from Firestore
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || configLoading) return;
     
     const fetchPlanData = async () => {
       setIsLoading(true);
@@ -79,17 +63,17 @@ function PlanningPage() {
           const tripData = tripSnap.data();
           setPlanDetails({
             id: tripId,
-            title: tripData.title || planDetails.title,
+            title: tripConfig?.title || tripData.title || planDetails.title,
             description: tripData.description || '',
-            startDate: tripData.startDate || defaultDates.startDate,
-            endDate: tripData.endDate || defaultDates.endDate,
+            startDate: tripConfig?.defaultStartDate || tripData.startDate || defaultDates.startDate,
+            endDate: tripConfig?.defaultEndDate || tripData.endDate || defaultDates.endDate,
             budget: tripData.budget || '',
             notes: tripData.notes || ''
           });
           
           setDateForm({
-            startDate: tripData.startDate || defaultDates.startDate,
-            endDate: tripData.endDate || defaultDates.endDate
+            startDate: tripConfig?.defaultStartDate || tripData.startDate || defaultDates.startDate,
+            endDate: tripConfig?.defaultEndDate || tripData.endDate || defaultDates.endDate
           });
         } else {
           // If the trip doesn't exist in Firestore yet, create it with default values
@@ -212,7 +196,7 @@ function PlanningPage() {
     fetchPlanData().then(() => {
       checkPendingActivity();
     });
-  }, [tripId]);
+  }, [tripId, configLoading]);
 
   // Initialize with sample booking data based on the plan
   const getInitialBookings = () => {
@@ -624,6 +608,22 @@ function PlanningPage() {
     }
   };
   
+  // Update planDetails title when tripConfig loads
+  useEffect(() => {
+    if (tripConfig) {
+      setPlanDetails((prev) => ({
+        ...prev,
+        title: tripConfig.title,
+        startDate: prev.startDate || tripConfig.defaultStartDate || '',
+        endDate: prev.endDate || tripConfig.defaultEndDate || '',
+      }));
+      setDateForm((prev) => ({
+        startDate: tripConfig.defaultStartDate || prev.startDate,
+        endDate: tripConfig.defaultEndDate || prev.endDate,
+      }));
+    }
+  }, [tripConfig]);
+  
   return (
     <div className="planning-page">
       <div className="d-flex justify-content-center align-items-center mb-4">
@@ -688,32 +688,30 @@ function PlanningPage() {
         </div>
       )}
       
-      {/* Trip dates info - now clickable */}
-      {(planDetails.startDate || planDetails.endDate) && (
-        <div 
-          className="alert alert-info mb-4 trip-dates-container clickable"
-          onClick={() => setShowDateConfig(!showDateConfig)}
-        >
-          <div className="d-flex align-items-center">
-            <span className="trip-dates-icon me-2">📅</span>
-            <div>
-              <strong className="trip-dates-label">Trip Dates: </strong>
-              <span className="trip-dates-value"> 
-                {planDetails.startDate ? new Date(planDetails.startDate).toLocaleDateString() : 'Not set'} 
-                {planDetails.endDate ? ' to ' + new Date(planDetails.endDate).toLocaleDateString() : ''}
+      {/* Always show this container so dates can be set initially */}
+      <div 
+        className="alert alert-info mb-4 trip-dates-container clickable"
+        onClick={() => setShowDateConfig(!showDateConfig)}
+      >
+        <div className="d-flex align-items-center">
+          <span className="trip-dates-icon me-2">📅</span>
+          <div>
+            <strong className="trip-dates-label">Trip Dates: </strong>
+            <span className="trip-dates-value"> 
+              {planDetails.startDate ? new Date(planDetails.startDate).toLocaleDateString() : 'Not set'} 
+              {planDetails.endDate ? ' to ' + new Date(planDetails.endDate).toLocaleDateString() : ''}
+            </span>
+            {planDetails.startDate && planDetails.endDate && (
+              <span className="trip-duration-badge ms-2">
+                {getDaysArray().length} days
               </span>
-              {planDetails.startDate && planDetails.endDate && (
-                <span className="trip-duration-badge ms-2">
-                  {getDaysArray().length} days
-                </span>
-              )}
-            </div>
-            <div className="ms-auto">
-              <span className="edit-dates-hint">Click to edit</span>
-            </div>
+            )}
+          </div>
+          <div className="ms-auto">
+            <span className="edit-dates-hint">Click to edit</span>
           </div>
         </div>
-      )}
+      </div>
       
       {showForm && (
         <div className="card bg-dark mb-4">

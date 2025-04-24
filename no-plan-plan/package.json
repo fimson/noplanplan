@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "bootstrap": "^5.3.5",
+    "country-to-emoji-flag": "^1.0.0",
     "firebase": "^11.6.0",
     "openai": "^4.95.1",
     "react": "^19.0.0",

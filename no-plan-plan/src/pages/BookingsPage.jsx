@@ -28,6 +28,9 @@ function BookingsPage() {
   const [uploadingTravelDoc, setUploadingTravelDoc] = useState(false);
   const [travelDocProgress, setTravelDocProgress] = useState(0);
 
+  // State to control transport guide visibility
+  const [showTransportGuide, setShowTransportGuide] = useState(true);
+
   // Guide topics for transportation
   const transportGuides = [
     {
@@ -38,6 +41,14 @@ function BookingsPage() {
     }
   ];
 
+  // State for editing the transport guide
+  const [isEditingGuide, setIsEditingGuide] = useState(false);
+  const [editableGuideTitle, setEditableGuideTitle] = useState(transportGuides[0].title);
+  const [editableGuideDescription, setEditableGuideDescription] = useState(transportGuides[0].description);
+  // Store original values for cancel
+  const [originalGuideTitle, setOriginalGuideTitle] = useState(transportGuides[0].title);
+  const [originalGuideDescription, setOriginalGuideDescription] = useState(transportGuides[0].description);
+
   // Set page title
   useEffect(() => {
     document.title = 'Trip Logistics';
@@ -46,15 +57,31 @@ function BookingsPage() {
     };
   }, []);
 
-  // Fetch bookings from Firestore
+  // Fetch bookings and guide visibility from Firestore
   useEffect(() => {
-    const fetchBookings = async () => {
+    const fetchData = async () => {
       if (!tripId) return;
       
       setIsLoading(true);
       setError(null);
       
       try {
+        // Fetch trip document for guide settings
+        const tripDocRef = doc(db, 'trips', tripId);
+        const tripDocSnap = await getDoc(tripDocRef);
+
+        if (tripDocSnap.exists()) {
+          const tripData = tripDocSnap.data();
+          // Set guide visibility based on Firestore data
+          if (tripData.guideSettings?.transportation?.visible === false) {
+            setShowTransportGuide(false);
+          }
+          // Note: If the field doesn't exist, it defaults to true (initial state)
+        } else {
+          console.warn("Trip document not found, defaulting guide visibility.");
+          // Handle case where trip doc might not exist yet if page is loaded too quickly?
+        }
+
         // Fetch bookings from Firestore
         const bookingsRef = collection(db, `trips/${tripId}/bookings`);
         const bookingsSnapshot = await getDocs(bookingsRef);
@@ -80,7 +107,7 @@ function BookingsPage() {
       }
     };
     
-    fetchBookings();
+    fetchData();
   }, [tripId]);
 
   // Fetch documents from Firebase Storage
@@ -449,6 +476,63 @@ function BookingsPage() {
     }
   };
 
+  // Handler to delete/hide the transport guide
+  const handleDeleteTransportGuide = async (e) => {
+    e.preventDefault(); // Prevent link navigation
+    e.stopPropagation(); // Stop event bubbling
+    setShowTransportGuide(false);
+
+    // --- Persist deletion to Firestore --- 
+    try {
+      const tripDocRef = doc(db, 'trips', tripId);
+      await updateDoc(tripDocRef, {
+        'guideSettings.transportation.visible': false
+      });
+      console.log("Transport guide visibility updated in Firestore.");
+    } catch (err) {
+      console.error("Error updating guide visibility in Firestore:", err);
+      // Optional: Revert local state if Firestore update fails?
+      // setShowTransportGuide(true); 
+      alert("Failed to permanently hide the guide. Please try again.");
+    }
+    // --- End Persistence --- 
+  };
+
+  // Handlers for editing the guide
+  const handleEditGuideClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOriginalGuideTitle(editableGuideTitle); // Store current values before editing
+    setOriginalGuideDescription(editableGuideDescription);
+    setIsEditingGuide(true);
+  };
+
+  const handleSaveGuideClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // In a real app, you'd save this to Firestore here
+    setIsEditingGuide(false);
+    // Update original values after save
+    setOriginalGuideTitle(editableGuideTitle);
+    setOriginalGuideDescription(editableGuideDescription);
+  };
+
+  const handleCancelGuideEdit = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditableGuideTitle(originalGuideTitle); // Restore original values
+    setEditableGuideDescription(originalGuideDescription);
+    setIsEditingGuide(false);
+  };
+
+  const handleGuideTitleChange = (e) => {
+    setEditableGuideTitle(e.target.value);
+  };
+
+  const handleGuideDescriptionChange = (e) => {
+    setEditableGuideDescription(e.target.value);
+  };
+
   return (
     <div className="bookings-page text-center">
       <div className="d-flex justify-content-center align-items-center mb-4 flex-column">
@@ -470,38 +554,106 @@ function BookingsPage() {
       {successMessage && <div className="alert alert-success">{successMessage}</div>}
       {isLoading && <div className="text-center"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div></div>}
 
-      {/* Guides Section */}
-      <div className="container mt-4 mb-5">
-        <div className="card mx-auto mb-4" style={{ maxWidth: '900px' }}>
-          <div className="card-body">
-            <h5 className="card-title mb-4">Travel Guides</h5>
-            <div className="row g-4">
-              {transportGuides.map((guide) => (
-                <div className="col-md-6 col-lg-4 mx-auto" key={guide.id}>
-                  <Link 
-                    to={`/trip/${tripId}/guide/${guide.id}`} 
-                    className="text-decoration-none"
-                  >
-                    <div className="card h-100 bg-dark border-secondary shadow-sm">
-                      <div className="card-body d-flex flex-column">
-                        <h3 className="card-title d-flex align-items-center mb-3 text-white">
-                          <span className="me-2 fs-4">{guide.emoji}</span> {guide.title}
-                        </h3>
-                        <p className="card-text text-light opacity-75 mb-3">
-                          {guide.description}
-                        </p>
-                        <div className="mt-auto text-end">
-                          <span className="text-primary fw-medium small">Read more →</span>
+      {/* Guides Section - Conditionally render based on state */}
+      {showTransportGuide && (
+        <div className="container mt-4 mb-5">
+          <div className="card mx-auto mb-4" style={{ maxWidth: '900px' }}>
+            <div className="card-body">
+              <h5 className="card-title mb-4">Travel Guides</h5>
+              <div className="row g-4">
+                {transportGuides.map((guide) => (
+                  <div className="col-md-6 col-lg-4 mx-auto" key={guide.id}>
+                    <Link 
+                      to={`/trip/${tripId}/guide/${guide.id}`} 
+                      className="text-decoration-none position-relative"
+                    >
+                      <div className="card h-100 bg-dark border-secondary shadow-sm">
+                        <div className="card-body d-flex flex-column position-relative pb-5">
+                          <h3 className="card-title d-flex align-items-center mb-3 text-white">
+                            <span className="me-2 fs-4">{guide.emoji}</span>
+                            {isEditingGuide ? (
+                              <input
+                                type="text"
+                                value={editableGuideTitle}
+                                onChange={handleGuideTitleChange}
+                                className="form-control form-control-sm bg-dark text-white border-secondary"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              editableGuideTitle
+                            )}
+                          </h3>
+
+                          {isEditingGuide ? (
+                            <textarea
+                              value={editableGuideDescription}
+                              onChange={handleGuideDescriptionChange}
+                              className="form-control form-control-sm bg-dark text-white border-secondary mb-3"
+                              rows="3"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <p className="card-text text-light opacity-75 mb-3">
+                              {editableGuideDescription}
+                            </p>
+                          )}
+                          
+                          {!isEditingGuide && (
+                            <div className="mt-auto text-end">
+                              <span className="text-primary fw-medium small">Read more →</span>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={handleDeleteTransportGuide}
+                            className="btn btn-sm btn-outline-danger border-0 p-1 position-absolute bottom-0 start-0 mb-2 ms-2"
+                            style={{ lineHeight: 1 }}
+                            title="Delete Guide"
+                          >
+                            🗑️
+                          </button>
+
+                          <div className="position-absolute bottom-0 end-0 mb-2 me-2 d-flex gap-1">
+                            {isEditingGuide ? (
+                              <>
+                                <button
+                                  onClick={handleSaveGuideClick}
+                                  className="btn btn-sm btn-outline-success border-0 p-1"
+                                  style={{ lineHeight: 1 }}
+                                  title="Save Changes"
+                                >
+                                  💾
+                                </button>
+                                <button
+                                  onClick={handleCancelGuideEdit}
+                                  className="btn btn-sm btn-outline-secondary border-0 p-1"
+                                  style={{ lineHeight: 1 }}
+                                  title="Cancel Edit"
+                                >
+                                  ❌
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={handleEditGuideClick}
+                                className="btn btn-sm btn-outline-primary border-0 p-1"
+                                style={{ lineHeight: 1 }}
+                                title="Edit Guide"
+                              >
+                                ✏️
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Link>
-                </div>
-              ))}
+                    </Link>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Travel Documents Section */}
       <div className="card mx-auto mb-4" style={{ maxWidth: '900px' }}>

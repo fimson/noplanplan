@@ -7,39 +7,12 @@ import rehypeExternalLinks from 'rehype-external-links';
 // Assume Firestore is initialized and 'db' is exported from firebase config
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config'; // Adjust path as needed
+import { guideTopics, slugify } from '../constants'; // Import from constants
 import './GuidePage.css'; // Import the CSS file
 
 // Define the topic titles and emojis
-const guideTopics = {
-  'history': { title: 'History Overview', emoji: '📜' },
-  'religion-culture': { title: 'Religion & Culture', emoji: '🧘‍♀️' },
-  'modern-japan': { title: 'Modern Japan', emoji: '💸' },
-  'etiquette': { title: 'Etiquette & Behavior', emoji: '🍣' },
-  'fun-facts': { title: 'Fun Facts & Family Pre-Reading', emoji: '🧠' },
-  'food': { title: 'Japanese Cuisine', emoji: '🍱' }
-};
 
 // Helper: Generate slug ids identical to those used in markdown links
-const slugify = (raw) => {
-  if (!raw) return '';
-  const toPlainText = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(toPlainText).join('');
-    return ''; // ignore other react elements for slug
-  };
-  const text = toPlainText(raw);
-
-  return text
-    .toLocaleLowerCase()
-    // First replace any whitespace sequence with single hyphen
-    .replace(/\s+/g, '-')
-    // Remove everything except letters (any script), numbers and hyphens
-    .replace(/[^\p{L}\p{N}-]+/gu, '')
-    // Collapse multiple hyphens
-    .replace(/-+/g, '-')
-    // Trim leading/trailing hyphens
-    .replace(/^-+|-+$/g, '');
-};
 
 function GuidePage() {
   const { tripId, itemId } = useParams();

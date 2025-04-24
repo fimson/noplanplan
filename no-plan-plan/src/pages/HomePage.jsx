@@ -1,23 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase-config';
 
 function HomePage() {
-  const [plans, setPlans] = useState([
-    {
-      id: 'japan-2025',
-      title: 'Japan Trip 2025',
-      description: 'Celebrating Yoki\'s birthday in the land of the rising sun',
-      image: 'https://www.thetrainline.com/cmsmedia/cms/7709/japan_2x.jpg',
-      category: 'Birthday'
-    },
-    {
-      id: 'iceland-2026',
-      title: 'Iceland  2026',
-      description: 'Northern lights, glaciers, hot springs, and volcanic landscapes',
-      image: 'https://media.cntraveler.com/photos/60748e5ed1058698d13c31ee/16:9/w_1920%2Cc_limit/Vatnajokull-Iceland-GettyImages-655074449.jpg',
-      category: 'Nature'
-    }
-  ]);
+  const [plans, setPlans] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [newPlan, setNewPlan] = useState({
     title: '',
@@ -28,7 +16,37 @@ function HomePage() {
   const [showForm, setShowForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-  const handleCreatePlan = () => {
+  // Subscribe to trips collection for real-time updates
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'trips'), (snapshot) => {
+      const fetched = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        fetched.push({
+          id: docSnap.id,
+          title: data.title || docSnap.id,
+          description: data.description || 'No description provided',
+          image: data.image || `https://source.unsplash.com/featured/?travel,${encodeURIComponent(docSnap.id)}`,
+          category: data.category || 'Travel',
+          createdAt: data.createdAt || serverTimestamp()
+        });
+      });
+      // sort by createdAt desc (fallback id)
+      fetched.sort((a,b)=>{
+        if(a.createdAt && b.createdAt){
+          const aTime = a.createdAt.seconds ? a.createdAt.seconds : a.createdAt;
+          const bTime = b.createdAt.seconds ? b.createdAt.seconds : b.createdAt;
+          return bTime - aTime;
+        }
+        return a.id < b.id ? 1 : -1;
+      });
+      setPlans(fetched);
+      setIsLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleCreatePlan = async () => {
     if (!newPlan.title.trim()) return;
     
     const id = newPlan.title.toLowerCase().replace(/\s+/g, '-');
@@ -38,18 +56,28 @@ function HomePage() {
       title: newPlan.title,
       description: newPlan.description || 'No description provided',
       image: `https://source.unsplash.com/featured/?travel,${encodeURIComponent(newPlan.title)}`,
-      createdAt: new Date().toISOString(),
+      createdAt: serverTimestamp(),
       category: newPlan.category || 'Travel'
     };
-    
-    setPlans([plan, ...plans]);
-    setNewPlan({ title: '', description: '', category: '' });
-    setShowForm(false);
+
+    try {
+      await setDoc(doc(db, 'trips', id), plan);
+      setNewPlan({ title: '', description: '', category: '' });
+      setShowForm(false);
+    } catch (e) {
+      console.error('Error creating plan:', e);
+      alert('Failed to create plan');
+    }
   };
 
-  const handleDeletePlan = (planId) => {
-    setPlans(plans.filter(plan => plan.id !== planId));
-    setShowDeleteConfirm(null);
+  const handleDeletePlan = async (planId) => {
+    try {
+      await deleteDoc(doc(db, 'trips', planId));
+      setShowDeleteConfirm(null);
+    } catch(e){
+      console.error('Error deleting plan:', e);
+      alert('Failed to delete plan');
+    }
   };
 
   // Determine column classes based on number of plans

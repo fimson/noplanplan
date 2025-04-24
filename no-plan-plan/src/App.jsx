@@ -11,7 +11,7 @@ import PlanningPage from './pages/PlanningPage'
 import PlanWishlistPage from './pages/PlanWishlistPage'
 import BookingsPage from './pages/BookingsPage'
 import GuidePage from './components/GuidePage'
-import AboutJapanPage from './pages/AboutJapanPage'
+import AboutTripPage from './pages/AboutTripPage'
 
 function HeaderWithBackButton() {
   const location = useLocation();
@@ -75,7 +75,7 @@ function App() {
             <Route path="/trip/:tripId/wishlist" element={<PlanWishlistPage />} />
             <Route path="/trip/:tripId/wishlist/:itemId/guide" element={<GuidePage />} />
             <Route path="/trip/:tripId/bookings" element={<BookingsPage />} />
-            <Route path="/trip/:tripId/about" element={<AboutJapanPage />} />
+            <Route path="/trip/:tripId/about" element={<AboutTripPage />} />
             <Route path="/trip/:tripId/guide/:itemId" element={<GuidePage />} />
           </Routes>
         </main>
@@ -85,7 +85,7 @@ function App() {
         </footer>
       </div>
       
-      <style jsx="true" global="true">{`
+      <style jsx global>{`
         .back-link {
           top: 0;
           left: 0;

@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { title } = req.body;
+    const { title, contextHint } = req.body;
 
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
@@ -17,15 +17,17 @@ export default async function handler(req, res) {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     
     if (!OPENAI_API_KEY) {
+      const fallbackContext = contextHint || 'travel';
       return res.status(500).json({ 
         error: 'OpenAI API key not configured',
         // Fallback values for development
-        description: `A popular tourist destination in Japan.`,
-        link: `https://www.japan-guide.com/e/search_result.html?q=${encodeURIComponent(title)}`,
-        imageUrl: 'https://source.unsplash.com/featured/?japan,' + encodeURIComponent(title)
+        description: `A popular tourist destination, possibly related to ${fallbackContext}.`,
+        link: `https://www.google.com/search?q=${encodeURIComponent(title)}+${encodeURIComponent(fallbackContext)}`,
+        imageUrl: `https://source.unsplash.com/featured/?${encodeURIComponent(fallbackContext)},${encodeURIComponent(title)}`
       });
     }
 
+    const promptContext = contextHint || 'general travel';
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -37,15 +39,15 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful travel assistant that provides information about tourist destinations in Japan.'
+            content: `You are a helpful travel assistant. Provide information about tourist destinations, considering the context: ${promptContext}.`
           },
           {
             role: 'user',
-            content: `Provide information about "${title}" in Japan. Return a JSON object with these fields: 
+            content: `Provide information about "${title}" in the context of ${promptContext}. Return ONLY a JSON object (no extra text or markdown) with these fields: 
             1. description (a brief 1-2 sentence description)
             2. link (a relevant URL to learn more about this place)
             3. imageUrl (a URL to a royalty-free image of this place)
-            Only return the JSON object with no additional text.`
+            If you cannot find a specific image or link, return null for that field.`
           }
         ],
         temperature: 0.7
@@ -66,10 +68,11 @@ export default async function handler(req, res) {
     } catch (parseError) {
       console.error('Failed to parse AI response as JSON:', parseError);
       // Fallback with default values
+      const fallbackContext = contextHint || 'travel';
       result = {
-        description: `A popular tourist destination in Japan.`,
-        link: `https://www.japan-guide.com/e/search_result.html?q=${encodeURIComponent(title)}`,
-        imageUrl: 'https://source.unsplash.com/featured/?japan,' + encodeURIComponent(title)
+        description: `Could not fetch details. Possibly a popular tourist destination related to ${fallbackContext}.`,
+        link: `https://www.google.com/search?q=${encodeURIComponent(title)}+${encodeURIComponent(fallbackContext)}`,
+        imageUrl: `https://source.unsplash.com/featured/?${encodeURIComponent(fallbackContext)},${encodeURIComponent(title)}`
       };
     }
 
@@ -77,12 +80,14 @@ export default async function handler(req, res) {
     return res.status(200).json(result);
   } catch (error) {
     console.error('Error in complete-details API:', error);
+    const fallbackContext = req.body.contextHint || 'travel';
+    const requestedTitle = req.body.title || 'destination';
     return res.status(500).json({ 
       error: 'Failed to complete details',
       // Fallback values
-      description: `A popular tourist destination in Japan.`,
-      link: `https://www.japan-guide.com/e/search_result.html?q=${encodeURIComponent(req.body.title || '')}`,
-      imageUrl: 'https://source.unsplash.com/featured/?japan,' + encodeURIComponent(req.body.title || '')
+      description: `Error fetching details. Possibly a popular tourist destination related to ${fallbackContext}.`,
+      link: `https://www.google.com/search?q=${encodeURIComponent(requestedTitle)}+${encodeURIComponent(fallbackContext)}`,
+      imageUrl: `https://source.unsplash.com/featured/?${encodeURIComponent(fallbackContext)},${encodeURIComponent(requestedTitle)}`
     });
   }
 } 
