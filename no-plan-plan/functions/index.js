@@ -12,6 +12,13 @@ const { onRequest } = require("firebase-functions/v2/https"); // Use v2 for easi
 const { defineSecret } = require("firebase-functions/params");
 const { OpenAI } = require("openai");
 const cors = require("cors")({ origin: true }); // Handle CORS automatically
+const admin = require("firebase-admin");
+const { Storage } = require("@google-cloud/storage");
+const sharp = require("sharp");
+const path = require("path");
+const { onObjectFinalized } = require("firebase-functions/v2/storage");
+
+admin.initializeApp();
 
 // Define the OpenAI API Key as a secret using Firebase function configuration
 // IMPORTANT: Set this secret using `firebase functions:secrets:set OPENAI_SECRET_KEY`
@@ -290,3 +297,29 @@ Format your response with clear headings and structured sections using markdown.
     }); // End CORS wrapper
   } // End onRequest handler
 ); // End exports.generateGuide
+
+// Thumbnail generator
+exports.generateThumbnails = onObjectFinalized({ memory: "1GiB", timeoutSeconds: 120 }, async (object) => {
+  const filePath = object.name; // e.g. trips/abc/hero/hero_original.jpg
+  if (!filePath.startsWith("trips/")) return; // Only process trip images
+  if (!object.contentType.startsWith("image/")) return;
+  if (filePath.includes("thumb_")) return; // avoid infinite loop
+
+  const bucket = admin.storage().bucket(object.bucket);
+  const tempLocalPath = `/tmp/${path.basename(filePath)}`;
+  await bucket.file(filePath).download({ destination: tempLocalPath });
+  const dirName = path.dirname(filePath);
+
+  const thumbPath = `${dirName}/thumb_800.webp`;
+  await sharp(tempLocalPath)
+    .resize({ width: 800 })
+    .webp({ quality: 75 })
+    .toFile(tempLocalPath + "_thumb");
+  await bucket.upload(tempLocalPath + "_thumb", {
+    destination: thumbPath,
+    metadata: {
+      contentType: "image/webp",
+      cacheControl: "public,max-age=31536000,immutable",
+    },
+  });
+});

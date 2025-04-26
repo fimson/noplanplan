@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import useTripConfig from '../hooks/useTripConfig';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase-config';
 
 function Wishlist({ planId, onAddToPlanning }) {
   const navigate = useNavigate();
@@ -32,6 +34,10 @@ function Wishlist({ planId, onAddToPlanning }) {
   const [showAddToPlanModal, setShowAddToPlanModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [regions, setRegions] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  
+  // Ref to top add/edit form card
+  const formRef = useRef(null);
   
   // Fetch wishlist items from Firestore
   useEffect(() => {
@@ -538,6 +544,16 @@ function Wishlist({ planId, onAddToPlanning }) {
     setExpandedForm(true);
     setEditIndex(index);
     setSelectedRegion(item.regionId || '');
+
+    // After state updates, scroll form into view so user sees it
+    setTimeout(() => {
+      if (formRef.current) {
+        formRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        // Fallback to top scroll
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 0);
   };
 
   const cancelEdit = () => {
@@ -888,7 +904,7 @@ function Wishlist({ planId, onAddToPlanning }) {
   return (
     <div className="wishlist-container">
       {/* Add Item Form */}
-      <div className="card bg-dark mb-4">
+      <div className="card bg-dark mb-4" ref={formRef}>
         <div className="card-body">
           <input
             type="text"
@@ -919,15 +935,81 @@ function Wishlist({ planId, onAddToPlanning }) {
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
               />
+              <div className="input-group mb-3">
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newItemImage}
+                  onChange={(e) => setNewItemImage(e.target.value)}
+                  placeholder="Image URL (optional - AI can suggest or upload)"
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading || uploadProgress !== null}
+                />
+                <button
+                  className="btn btn-outline-secondary"
+                  type="button"
+                  disabled={!newItemImage || uploadProgress !== null}
+                  title="Import image to Firebase Storage"
+                  onClick={async () => {
+                    if (!newItemImage.startsWith('http')) return;
+                    try {
+                      setUploadProgress(0);
+                      const resp = await fetch(newItemImage);
+                      const blob = await resp.blob();
+                      const ext = blob.type.split('/')[1] || 'jpg';
+                      const path = `trips/${planId}/wishlist/temp_${Date.now()}.${ext}`;
+                      const imgRef = storageRef(storage, path);
+                      const uploadTask = uploadBytesResumable(imgRef, blob, { contentType: blob.type });
+                      uploadTask.on('state_changed', (snap) => {
+                        setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+                      }, (err) => {
+                        console.error('Upload error', err);
+                        alert('Image upload failed');
+                        setUploadProgress(null);
+                      }, async () => {
+                        const downloadURL = await getDownloadURL(imgRef);
+                        setNewItemImage(downloadURL);
+                        setUploadProgress(null);
+                      });
+                    } catch (err) {
+                      console.error('Import failed', err);
+                      alert('Failed to import image');
+                      setUploadProgress(null);
+                    }
+                  }}
+                >Import</button>
+              </div>
               <input
-                type="text"
+                type="file"
+                accept="image/*"
                 className="form-control mb-3"
-                value={newItemImage}
-                onChange={(e) => setNewItemImage(e.target.value)}
-                placeholder="Image URL (optional - AI can suggest)"
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
+                disabled={isLoading || uploadProgress !== null}
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  setUploadProgress(0);
+                  const ext = file.name.split('.').pop();
+                  const path = `trips/${planId}/wishlist/temp_${Date.now()}.${ext}`;
+                  const imgRef = storageRef(storage, path);
+                  const uploadTask = uploadBytesResumable(imgRef, file, { contentType: file.type });
+                  uploadTask.on('state_changed', (snap) => {
+                    setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+                  }, (err) => {
+                    console.error('Upload error', err);
+                    alert('Image upload failed');
+                    setUploadProgress(null);
+                  }, async () => {
+                    const downloadURL = await getDownloadURL(imgRef);
+                    setNewItemImage(downloadURL);
+                    setUploadProgress(null);
+                  });
+                }}
               />
+              {uploadProgress !== null && (
+                <div className="progress mb-3">
+                  <div className="progress-bar" style={{width: `${uploadProgress}%`}} />
+                </div>
+              )}
               <textarea
                 className="form-control mb-3"
                 value={newItemDescription}

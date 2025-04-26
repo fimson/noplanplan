@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import RegionManager from '/src/components/RegionManager.jsx';
 import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase-config';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase-config';
 import useTripConfig from '../hooks/useTripConfig';
 import countryToEmoji from 'country-to-emoji-flag';
 
@@ -54,6 +55,7 @@ function PlanPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({...plan});
   const [isLoading, setIsLoading] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState(null); // null when idle
   
   // Default regions from config (fallback empty array)
   const defaultRegions = tripConfig?.defaultRegions || [];
@@ -265,14 +267,77 @@ function PlanPage() {
                 />
               </div>
               <div className="col-md-6">
-                <label htmlFor="image" className="form-label">Cover Image URL</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  id="image"
-                  value={editForm.image}
-                  onChange={(e) => setEditForm({...editForm, image: e.target.value})}
-                />
+                <label htmlFor="imageUrl" className="form-label">Cover Image URL</label>
+                <div className="input-group">
+                  <input
+                    type="text"
+                    className="form-control"
+                    id="imageUrl"
+                    value={editForm.image}
+                    placeholder="Paste external image URL or upload file"
+                    onChange={(e) => setEditForm({...editForm, image: e.target.value})}
+                  />
+                  <button
+                    className="btn btn-outline-secondary"
+                    type="button"
+                    disabled={!editForm.image || uploadProgress !== null}
+                    onClick={async () => {
+                      const url = editForm.image;
+                      if (!url.startsWith('http')) return;
+                      try {
+                        setUploadProgress(0);
+                        const resp = await fetch(url);
+                        const blob = await resp.blob();
+                        const ext = blob.type.split('/')[1] || 'jpg';
+                        const path = `trips/${tripId}/hero/hero_original.${ext}`;
+                        const imgRef = storageRef(storage, path);
+                        const uploadTask = uploadBytesResumable(imgRef, blob, { contentType: blob.type });
+                        uploadTask.on('state_changed', (snap) => {
+                          setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+                        }, (err) => {
+                          console.error('Upload error', err);
+                          alert('Image upload failed');
+                          setUploadProgress(null);
+                        }, async () => {
+                          const downloadURL = await getDownloadURL(imgRef);
+                          setEditForm({...editForm, image: downloadURL});
+                          setUploadProgress(null);
+                        });
+                      } catch (err) {
+                        console.error('Fetch/upload failed', err);
+                        alert('Failed to import image');
+                        setUploadProgress(null);
+                      }
+                    }}
+                  >Import</button>
+                </div>
+                <div className="mt-2">
+                  <input type="file" accept="image/*" className="form-control" onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    setUploadProgress(0);
+                    const ext = file.name.split('.').pop();
+                    const path = `trips/${tripId}/hero/hero_original.${ext}`;
+                    const imgRef = storageRef(storage, path);
+                    const uploadTask = uploadBytesResumable(imgRef, file, { contentType: file.type });
+                    uploadTask.on('state_changed', (snap) => {
+                      setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+                    }, (err) => {
+                      console.error('Upload error', err);
+                      alert('Image upload failed');
+                      setUploadProgress(null);
+                    }, async () => {
+                      const downloadURL = await getDownloadURL(imgRef);
+                      setEditForm({...editForm, image: downloadURL});
+                      setUploadProgress(null);
+                    });
+                  }} />
+                  {uploadProgress !== null && (
+                    <div className="progress mt-1">
+                      <div className="progress-bar" style={{width: `${uploadProgress}%`}} />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="col-md-6">
                 <label htmlFor="tagline" className="form-label">Tagline</label>
