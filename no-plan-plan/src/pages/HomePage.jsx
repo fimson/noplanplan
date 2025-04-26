@@ -28,16 +28,24 @@ function HomePage() {
           description: data.description || 'No description provided',
           image: data.image || `https://source.unsplash.com/featured/?travel,${encodeURIComponent(docSnap.id)}`,
           category: data.category || 'Travel',
-          createdAt: data.createdAt || serverTimestamp()
+          createdAt: data.createdAt || serverTimestamp(),
+          startDate: data.startDate || null,
+          endDate: data.endDate || null
         });
       });
-      // sort by createdAt desc (fallback id)
-      fetched.sort((a,b)=>{
-        if(a.createdAt && b.createdAt){
-          const aTime = a.createdAt.seconds ? a.createdAt.seconds : a.createdAt;
-          const bTime = b.createdAt.seconds ? b.createdAt.seconds : b.createdAt;
-          return bTime - aTime;
+      // Sort by createdAt (newest first)
+      fetched.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt instanceof Date ? a.createdAt.getTime() : null);
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt instanceof Date ? b.createdAt.getTime() : null);
+        
+        if (aTime && bTime) {
+          return bTime - aTime; // Newest first
         }
+        // Put items with dates before those without
+        if (aTime) return -1;
+        if (bTime) return 1;
+        
+        // Fallback sort by ID if dates are missing
         return a.id < b.id ? 1 : -1;
       });
       setPlans(fetched);

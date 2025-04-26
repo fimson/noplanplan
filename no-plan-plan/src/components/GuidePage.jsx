@@ -352,7 +352,7 @@ Mix history, culture, etiquette, food, and daily life into lively narratives, no
 
 Call out absurdities (especially bureaucracy, tourist mistakes, etc.) with humor.
 
-Assume the reader is smart but unfamiliar with Japan's quirks.
+Assume the reader is smart but unfamiliar with local's quirks.
 
 Use occasional rhetorical questions and witty metaphors.
 No sugar-coating. Always speak like you're giving the real story to curious, slightly overwhelmed travelers.`;

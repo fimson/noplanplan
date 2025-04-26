@@ -1,10 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import RegionManager from '/src/components/RegionManager.jsx';
-import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import useTripConfig from '../hooks/useTripConfig';
 import countryToEmoji from 'country-to-emoji-flag';
+
+// Helper to format Date or Timestamp to YYYY-MM-DD
+const formatDateForInput = (dateOrTimestamp) => {
+  if (!dateOrTimestamp) return '';
+  let date;
+  if (dateOrTimestamp.toDate) { // Firestore Timestamp
+    date = dateOrTimestamp.toDate();
+  } else if (dateOrTimestamp instanceof Date) { // JS Date
+    date = dateOrTimestamp;
+  } else {
+    try {
+      date = new Date(dateOrTimestamp); // Try parsing string/number
+    } catch (e) {
+      return ''; // Invalid date
+    }
+  }
+  if (isNaN(date.getTime())) return ''; // Invalid date check
+  return date.toISOString().split('T')[0];
+};
 
 function PlanPage() {
   const { tripId } = useParams();
@@ -22,7 +41,8 @@ function PlanPage() {
     budget: '',
     notes: '',
     flagEmoji: '',
-    tagline: ''
+    tagline: '',
+    createdAt: ''
   });
   
   // Get appropriate flag for the plan
@@ -54,6 +74,8 @@ function PlanPage() {
         
         if (tripSnap.exists()) {
           const tripData = tripSnap.data();
+          const formattedCreatedAt = formatDateForInput(tripData.createdAt);
+
           setPlan({
             id: tripId,
             title: tripData.title || plan.title,
@@ -65,7 +87,8 @@ function PlanPage() {
             budget: tripData.budget || '',
             notes: tripData.notes || '',
             flagEmoji: tripData.flagEmoji || '',
-            tagline: tripData.tagline || ''
+            tagline: tripData.tagline || '',
+            createdAt: formattedCreatedAt
           });
           setEditForm({
             id: tripId,
@@ -78,21 +101,25 @@ function PlanPage() {
             budget: tripData.budget || '',
             notes: tripData.notes || '',
             flagEmoji: tripData.flagEmoji || '',
-            tagline: tripData.tagline || ''
+            tagline: tripData.tagline || '',
+            createdAt: formattedCreatedAt
           });
         } else {
           // If the trip doesn't exist in Firestore yet, create it with default values
-          await setDoc(doc(db, 'trips', tripId), {
-            title: plan.title,
-            description: plan.description,
-            image: plan.image,
-            countryCode: plan.countryCode,
-            flagEmoji: plan.flagEmoji,
-            tagline: plan.tagline,
+          const newPlanData = {
+            title: plan.title || `Trip ${tripId}`,
+            description: plan.description || '',
+            image: plan.image || '',
+            countryCode: plan.countryCode || '',
+            flagEmoji: plan.flagEmoji || '',
+            tagline: plan.tagline || '',
             topicGuides: [],
-            createdAt: new Date(),
-            lastUpdated: new Date()
-          });
+            createdAt: serverTimestamp(),
+            lastUpdated: serverTimestamp()
+          };
+          await setDoc(doc(db, 'trips', tripId), newPlanData);
+          setPlan({ ...newPlanData, id: tripId, createdAt: formatDateForInput(new Date()) });
+          setEditForm({ ...newPlanData, id: tripId, createdAt: formatDateForInput(new Date()) });
         }
         
         // Fetch regions
@@ -129,7 +156,7 @@ function PlanPage() {
     };
     
     fetchPlanAndRegions();
-  }, [tripId]);
+  }, [tripId, defaultRegions]);
 
   // When tripConfig loads, update local plan state defaults if not yet set
   useEffect(() => {
@@ -161,8 +188,25 @@ function PlanPage() {
     setIsLoading(true);
     
     try {
-      // Update trip details in Firestore - removed date fields
-      await setDoc(doc(db, 'trips', tripId), {
+      // Convert the createdAt date string back to a Date object for saving
+      let createdAtValue;
+      if (editForm.createdAt) {
+        try {
+          createdAtValue = new Date(editForm.createdAt);
+          if (isNaN(createdAtValue.getTime())) {
+            console.warn("Invalid createdAt date string, using server timestamp.");
+            createdAtValue = serverTimestamp();
+          }
+        } catch (e) {
+          console.warn("Error parsing createdAt date string, using server timestamp.");
+          createdAtValue = serverTimestamp();
+        }
+      } else {
+        createdAtValue = serverTimestamp();
+      }
+
+      // Update trip details in Firestore - including createdAt
+      const updateData = {
         title: editForm.title,
         description: editForm.description,
         image: editForm.image,
@@ -171,8 +215,11 @@ function PlanPage() {
         tagline: editForm.tagline,
         budget: editForm.budget,
         notes: editForm.notes,
-        lastUpdated: new Date()
-      }, { merge: true });
+        ...(createdAtValue instanceof Date && { createdAt: createdAtValue }),
+        lastUpdated: serverTimestamp()
+      };
+
+      await setDoc(doc(db, 'trips', tripId), updateData, { merge: true });
       
       // Update local state
       setPlan({...editForm, id: tripId});
@@ -285,6 +332,16 @@ function PlanPage() {
                     onChange={(e) => setEditForm({...editForm, budget: e.target.value})}
                   />
                 </div>
+              </div>
+              <div className="col-md-6">
+                <label htmlFor="createdAt" className="form-label">Date Created</label>
+                <input
+                  type="date"
+                  className="form-control bg-dark text-light border-secondary"
+                  id="createdAt"
+                  value={editForm.createdAt || ''}
+                  onChange={(e) => setEditForm({...editForm, createdAt: e.target.value})}
+                />
               </div>
               <div className="col-md-12">
                 <label htmlFor="notes" className="form-label">Notes</label>
