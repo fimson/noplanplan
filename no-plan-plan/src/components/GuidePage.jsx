@@ -27,6 +27,11 @@ function GuidePage() {
   const [error, setError] = useState(null);
   const [language, setLanguage] = useState('en');
   const [isTopicGuide, setIsTopicGuide] = useState(false);
+  // Add state for AI generation
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  // Add state to track if content was AI-generated
+  const [isAIGenerated, setIsAIGenerated] = useState(false);
 
   // Check if this is a topic-based guide or a wishlist item guide
   useEffect(() => {
@@ -197,6 +202,8 @@ function GuidePage() {
           setOriginalContent(content);
           // Firestore Timestamps are objects, convert to JS Date if needed
           setLastUpdated(data.lastUpdated?.toDate ? data.lastUpdated.toDate() : null); 
+          // Set AI-generated flag if present
+          setIsAIGenerated(data.isAIGenerated || false);
           
           // Store in sessionStorage as a backup in case of network issues
           try {
@@ -289,7 +296,8 @@ function GuidePage() {
       // Update only the current language content
       await setDoc(currentGuideRef, { 
         [language]: guideContent,
-        lastUpdated: serverTimestamp() // Real Firestore serverTimestamp
+        lastUpdated: serverTimestamp(), // Real Firestore serverTimestamp
+        isAIGenerated: isAIGenerated // Store this flag in Firestore
       }, { merge: true }); 
 
       console.log('Guide saved successfully');
@@ -322,6 +330,77 @@ function GuidePage() {
       setLanguage(lang);
     }
   };
+
+  // --- Add AI Generation Handler ---
+  const handleGenerateAI = async () => {
+    const userPrompt = window.prompt("Enter your prompt for the AI:");
+    if (!userPrompt) {
+      return; // User cancelled
+    }
+
+    setIsGeneratingAI(true);
+    setAiError(null); // Clear previous AI errors
+
+    // Define the persona context
+    const personaContext = `Act as "Hiro," a sarcastic, storytelling, highly knowledgeable tour guide.
+
+Write long, detailed, immersive answers with structured sections and optional markdown TOC.
+
+Style: humorous, dryly sarcastic, sharp-witted but deeply respectful toward local culture.
+
+Mix history, culture, etiquette, food, and daily life into lively narratives, not just bullet points.
+
+Call out absurdities (especially bureaucracy, tourist mistakes, etc.) with humor.
+
+Assume the reader is smart but unfamiliar with Japan's quirks.
+
+Use occasional rhetorical questions and witty metaphors.
+No sugar-coating. Always speak like you're giving the real story to curious, slightly overwhelmed travelers.`;
+
+    try {
+      // Use a direct Cloud Function URL similar to Wishlist implementation
+      // URL should match your deployed Cloud Function in the same project
+      const functionUrl = "https://generateguide-vsjk6mhqqq-uc.a.run.app";
+      console.log(`Calling AI guide generation for language: ${language}`);
+      
+      const response = await fetch(functionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: userPrompt,
+          language: language,
+          context: personaContext,
+          guideType: isTopicGuide ? 'topic' : 'wishlist',
+          tripId: tripId,
+          itemId: itemId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error("Cloud Function Error Response:", errorBody);
+        throw new Error(`AI generation failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Check if the response contains the generated text
+      if (data.generatedText) {
+        setGuideContent(data.generatedText);
+        setIsAIGenerated(true); // Mark this content as AI-generated
+        console.log("Successfully generated guide content with AI");
+      } else {
+        throw new Error("Received invalid response from AI service - missing generatedText field");
+      }
+
+    } catch (err) {
+      console.error("Error generating AI content:", err);
+      setAiError(err.message || "An unknown error occurred during AI generation.");
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+  // --- End AI Generation Handler ---
 
   return (
     <div className="container mt-4 guide-page">
@@ -383,14 +462,37 @@ function GuidePage() {
                     value={guideContent}
                     onChange={(e) => setGuideContent(e.target.value)}
                     placeholder={guideContent ? '' : `No guide written yet in ${language.toUpperCase()}. Write the first one!`}
-                    disabled={isSaving}
+                    disabled={isSaving || isGeneratingAI} // Disable if saving or generating
                     style={{ minHeight: '300px' }}
                   />
-                  <div className="d-flex justify-content-end gap-2">
-                    <button onClick={handleCancel} className="btn btn-secondary" disabled={isSaving}>
+                  {/* Display AI Error */}
+                  {aiError && <div className="alert alert-danger mt-2 py-1 px-2" style={{fontSize: '0.9em'}}>{aiError}</div>}
+
+                  <div className="d-flex justify-content-end gap-2 mt-3">
+                     {/* Add the new AI button */}
+                     <button
+                       onClick={handleGenerateAI}
+                       className="btn btn-outline-info d-flex align-items-center" // Use outline-info or another style
+                       disabled={isSaving || isGeneratingAI}
+                       style={{ padding: '0.375rem 0.75rem' }} // Match styling of other buttons if needed
+                     >
+                       {isGeneratingAI ? (
+                         <>
+                           <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                           Generating...
+                         </>
+                       ) : (
+                         <>
+                           <span className="me-2" style={{fontSize: '1.1em'}}>🧠</span> {/* Brain Icon */}
+                           Generate with AI
+                         </>
+                       )}
+                     </button>
+
+                    <button onClick={handleCancel} className="btn btn-secondary" disabled={isSaving || isGeneratingAI}>
                       Cancel
                     </button>
-                    <button onClick={handleSave} className="btn btn-success" disabled={isSaving}>
+                    <button onClick={handleSave} className="btn btn-success" disabled={isSaving || isGeneratingAI}>
                       {isSaving ? (
                         <>
                           <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -405,7 +507,15 @@ function GuidePage() {
               ) : (
                 <>
                   {guideContent ? (
-                    <div className="markdown-content">
+                    <div className={`markdown-content ${isAIGenerated ? 'ai-content-padding' : ''}`}>
+                      {/* AI Generated Banner */}
+                      {isAIGenerated && (
+                        <div className="ai-generated-banner">
+                          <div className="ai-badge">
+                            <span className="ai-icon">🧠</span> Generated with AI
+                          </div>
+                        </div>
+                      )}
                       <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -502,6 +612,49 @@ function GuidePage() {
           </div>
         </>
       )}
+
+      <style>{`
+        .ai-generated-banner {
+          position: relative;
+          margin-bottom: 1rem;
+          height: 30px; /* Fixed height to create space */
+        }
+        
+        .ai-badge {
+          position: absolute;
+          top: 0;
+          right: 0;
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          color: white;
+          font-size: 0.8rem;
+          padding: 0.3rem 0.6rem;
+          border-radius: 0.3rem;
+          display: flex;
+          align-items: center;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          z-index: 100;
+          animation: fadeIn 0.5s ease-out;
+        }
+        
+        .ai-icon {
+          margin-right: 0.3rem;
+          font-size: 1.1em;
+        }
+        
+        /* Add padding to the content when AI-generated */
+        .markdown-content {
+          position: relative;
+        }
+        
+        .ai-content-padding {
+          padding-top: 40px;
+        }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }

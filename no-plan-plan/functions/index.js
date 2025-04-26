@@ -189,3 +189,104 @@ Only return the JSON object — no extra commentary.`;
     }); // End CORS wrapper
   } // End onRequest handler
 ); // End exports.processWishlistItem
+
+// Cloud Function for generating travel guide content with AI
+exports.generateGuide = onRequest(
+  // Ensure the function has access to the secret and increase memory to handle longer text generation
+  { secrets: [openaiApiKey], memory: "1GiB" },
+  async (req, res) => {
+    // Enable CORS for all origins for this function
+    cors(req, res, async () => {
+      // Ensure it's a POST request
+      if (req.method !== "POST") {
+        console.log("Received non-POST request:", req.method);
+        return res.status(405).send({ error: "Method Not Allowed" });
+      }
+
+      // Extract data from the request body
+      const { prompt, language, context, guideType, tripId, itemId } = req.body;
+      console.log("Received guide generation request:", {
+        language,
+        guideType,
+        tripId,
+        itemId
+      });
+
+      // Basic validation
+      if (!prompt || !language) {
+        console.log("Missing required fields: prompt or language");
+        return res.status(400).send({ 
+          error: "Missing required fields: prompt (string) and language (string)." 
+        });
+      }
+
+      try {
+        console.log("Initializing OpenAI client for guide generation...");
+        const openai = new OpenAI({
+          apiKey: openaiApiKey.value(), // Access the secret's value
+        });
+
+        // Determine the system prompt based on language
+        let systemPrompt = context || "You are a helpful travel guide writer.";
+        
+        // Add language-specific instructions
+        if (language === "ru") {
+          systemPrompt += "\n\nПожалуйста, пиши ответ на русском языке. Используй информативный и интересный стиль. Отвечай подробно, с историческими и культурными фактами.";
+        }
+
+        // Adjust the prompt based on guide type
+        let userPrompt = prompt;
+        if (guideType === 'topic') {
+          userPrompt = `Write a comprehensive travel guide about: ${prompt}. 
+Include relevant historical facts, cultural insights, and practical information.
+Format your response with clear headings and structured sections using markdown.`;
+        } else if (guideType === 'wishlist') {
+          userPrompt = `Write a detailed guide about this specific location or attraction: ${prompt}.
+Include what makes it special, practical visiting information, and cultural or historical context.
+Format your response with clear headings and structured sections using markdown.`;
+        }
+
+        console.log("Sending guide generation prompt to OpenAI");
+
+        // Call the OpenAI Chat Completions API with higher token limit
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini", // Using gpt-4o-mini
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.7, // Slightly higher temperature for creative content
+          max_tokens: 1500, // Allow for longer responses
+        });
+
+        // Extract the generated text from the API response
+        const generatedText = completion.choices[0].message.content;
+        if (!generatedText) {
+          console.error("OpenAI returned an empty response content.");
+          throw new Error("OpenAI returned an empty response.");
+        }
+
+        console.log("Successfully generated guide content");
+        
+        // Return the generated text
+        return res.status(200).json({ 
+          generatedText,
+          language,
+          itemId
+        });
+
+      } catch (error) {
+        console.error("Error during guide generation:", error);
+        // Log specific OpenAI errors if available
+        if (error.response) {
+          console.error("OpenAI API Error Details:", error.response.status, error.response.data);
+        }
+        // Send error response
+        return res.status(500).send({ 
+          error: "Failed to generate guide content",
+          message: error.message
+        });
+      }
+    }); // End CORS wrapper
+  } // End onRequest handler
+); // End exports.generateGuide

@@ -31,8 +31,8 @@ export const slugify = (raw) => {
     // Remove everything except letters (any script), numbers and hyphens
     // Added underscore to allow it in slugs
     .replace(/[^\p{L}\p{N}_-]+/gu, '')
-    // Trim leading/trailing hyphens
-    .replace(/^-+|-+$/g, '')
+    // Trim trailing hyphens (keep leading ones to maintain anchor consistency)
+    .replace(/-+$/g, '')
     // Replace multiple hyphens with a single one
     .replace(/-{2,}/g, '-');
 }; 
