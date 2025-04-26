@@ -35,6 +35,8 @@ function Wishlist({ planId, onAddToPlanning }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [regions, setRegions] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(null);
+  // Controls visibility of the add-wish form card
+  const [showForm, setShowForm] = useState(false);
   
   // Ref to top add/edit form card
   const formRef = useRef(null);
@@ -347,133 +349,52 @@ function Wishlist({ planId, onAddToPlanning }) {
     }
   };
 
+  // Simplified addItem: store exactly what the user typed, no AI, no auto-fills
   const addItem = async () => {
-    const originalTitle = newItem.trim();
-    if (originalTitle === '') return;
+    const title = newItem.trim();
+    if (!title) return;
 
     setIsLoading(true);
-    console.log("Adding item:", originalTitle);
-    console.log("Manually selected region:", selectedRegion || 'None');
 
-    let aiResult = {}; // Initialize empty AI result
-    const needsAIDetails = !newItemDescription.trim() || !newItemLink.trim() || !newItemImage.trim();
-    const needsAIRegion = !selectedRegion;
-    const needsAICall = needsAIDetails || needsAIRegion;
+    const id = `${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
+    const itemData = {
+      title,
+      votes: 0,
+      link: newItemLink.trim(),
+      imageUrl: newItemImage.trim(),
+      description: newItemDescription.trim(),
+      createdAt: new Date(),
+      planned: false,
+      regionId: selectedRegion || null
+    };
 
-    // --- Step 1: Call AI Function if needed --- 
-    if (needsAICall) {
-      const functionUrl = "https://processwishlistitem-vsjk6mhqqq-uc.a.run.app";
-      console.log(`Attempting AI call to: ${functionUrl}`);
-      try {
-        const response = await fetch(functionUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: originalTitle,
-            availableRegions: regions, 
-            needsRegionSuggestion: needsAIRegion 
-          }),
-        });
-  
-        if (!response.ok) {
-          const errorBody = await response.text();
-          console.error("Cloud Function Error Response:", errorBody);
-          throw new Error(`Cloud Function request failed: ${response.status} ${response.statusText}`);
-        }
-  
-        aiResult = await response.json();
-        // Ensure expected fields exist, defaulting to null if not provided by AI
-        aiResult.correctedTitle = aiResult.correctedTitle || originalTitle;
-        aiResult.description = aiResult.description || null;
-        aiResult.link = aiResult.link || null;
-        aiResult.imageUrl = aiResult.imageUrl || null;
-        aiResult.suggestedRegionId = aiResult.suggestedRegionId || null;
-
-        console.log("Received AI Result:", aiResult);
-
-      } catch (error) {
-        console.error("Error calling Cloud Function:", error);
-        // Reset aiResult on error to avoid using partial/bad data
-        aiResult = {
-            correctedTitle: originalTitle, // Fallback to original title on error
-            description: null,
-            link: null,
-            imageUrl: null,
-            suggestedRegionId: null
-        };
-      }
-    } else {
-      console.log("No AI call needed, all details provided manually.");
-      // Ensure aiResult structure is consistent even if no call was made
-      aiResult = { 
-          correctedTitle: originalTitle, 
-          description: null, 
-          link: null, 
-          imageUrl: null, 
-          suggestedRegionId: null 
-      };
-    }
-
-    // --- Step 2: Determine Final Values --- 
-    // Prioritize user input, then AI result (if available), then null.
-    const finalTitle = aiResult.correctedTitle || originalTitle; // Use corrected title if available
-    const finalDescription = newItemDescription.trim() || aiResult.description;
-    const finalLink = newItemLink.trim() || aiResult.link;
-    const finalImageUrl = newItemImage.trim() || aiResult.imageUrl;
-    const finalRegionId = selectedRegion || aiResult.suggestedRegionId;
-
-    console.log("Final Region ID determined:", finalRegionId || 'None');
-
-    // --- Step 3: Prepare and Add Item --- 
     try {
-      const id = finalTitle.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
-
-      const itemData = {
-        title: finalTitle,
-        votes: 0,
-        link: finalLink || '',
-        imageUrl: finalImageUrl || '',
-        description: finalDescription || '',
-        createdAt: new Date(),
-        planned: false,
-        regionId: finalRegionId || null
-      };
-      
-      console.log("Final item to add/update:", itemData);
-
-      // Add or Update item in Firestore
       if (editIndex !== null) {
-        const itemToUpdate = items[editIndex];
-        // Keep existing votes and planned status
-        itemData.votes = itemToUpdate.votes;
-        itemData.planned = itemToUpdate.planned; 
-        
-        // Update in Firestore
-        await setDoc(doc(db, `trips/${planId}/wishlist`, itemToUpdate.id), itemData, { merge: true });
-        
-        // Update local state
+        // Update existing item
+        const original = items[editIndex];
+        await setDoc(doc(db, `trips/${planId}/wishlist`, original.id), {
+          ...itemData,
+          votes: original.votes,
+          planned: original.planned
+        }, { merge: true });
+
         const updatedItems = [...items];
-        updatedItems[editIndex] = { ...itemData, id: itemToUpdate.id, createdAt: itemData.createdAt.toISOString() };
+        updatedItems[editIndex] = { ...itemData, id: original.id, createdAt: itemData.createdAt.toISOString() };
         setItems(updatedItems);
         setEditIndex(null);
-        console.log("Item updated in Firestore.");
       } else {
-        // Add new item to Firestore
+        // Create new
         await setDoc(doc(db, `trips/${planId}/wishlist`, id), itemData);
-        
-        // Add to local state
-        const newItemWithId = { ...itemData, id, createdAt: itemData.createdAt.toISOString() };
-        setItems([newItemWithId, ...items]);
-        console.log("Item added to Firestore.");
+        setItems([{ ...itemData, id, createdAt: itemData.createdAt.toISOString() }, ...items]);
       }
-      
+
       resetForm();
-    } catch (error) {
-      console.error("Error saving item to Firestore:", error);
-      alert(`Error saving item: ${error.message}`);
+      setShowForm(false);
+    } catch (err) {
+      console.error('Error saving item:', err);
+      alert('Error saving item');
     } finally {
       setIsLoading(false);
-      console.log("Finished addItem process.");
     }
   };
 
@@ -541,6 +462,7 @@ function Wishlist({ planId, onAddToPlanning }) {
     setNewItemLink(item.link || '');
     setNewItemImage(item.imageUrl || '');
     setNewItemDescription(item.description || '');
+    setShowForm(true);
     setExpandedForm(true);
     setEditIndex(index);
     setSelectedRegion(item.regionId || '');
@@ -559,6 +481,7 @@ function Wishlist({ planId, onAddToPlanning }) {
   const cancelEdit = () => {
     resetForm();
     setEditIndex(null);
+    setShowForm(false);
   };
   
   const handleAddToPlan = (item) => {
@@ -904,6 +827,7 @@ function Wishlist({ planId, onAddToPlanning }) {
   return (
     <div className="wishlist-container">
       {/* Add Item Form */}
+      {showForm && (
       <div className="card bg-dark mb-4" ref={formRef}>
         <div className="card-body">
           <input
@@ -911,7 +835,7 @@ function Wishlist({ planId, onAddToPlanning }) {
             className="form-control mb-3"
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
-            placeholder="Add a place or activity..."
+            placeholder="Wish title..."
             onKeyDown={handleKeyDown}
             disabled={isLoading}
           />
@@ -931,7 +855,7 @@ function Wishlist({ planId, onAddToPlanning }) {
                 className="form-control mb-3"
                 value={newItemLink}
                 onChange={(e) => setNewItemLink(e.target.value)}
-                placeholder="Link (optional - AI can suggest)"
+                placeholder="Link (optional)"
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
               />
@@ -941,7 +865,7 @@ function Wishlist({ planId, onAddToPlanning }) {
                   className="form-control"
                   value={newItemImage}
                   onChange={(e) => setNewItemImage(e.target.value)}
-                  placeholder="Image URL (optional - AI can suggest or upload)"
+                  placeholder="Image URL (optional)"
                   onKeyDown={handleKeyDown}
                   disabled={isLoading || uploadProgress !== null}
                 />
@@ -1014,13 +938,13 @@ function Wishlist({ planId, onAddToPlanning }) {
                 className="form-control mb-3"
                 value={newItemDescription}
                 onChange={(e) => setNewItemDescription(e.target.value)}
-                placeholder="Description (optional - AI can suggest)"
+                placeholder="Description (optional)"
                 rows="3"
                 disabled={isLoading}
               />
               
               <div className="mb-3">
-                  <label htmlFor="regionSelect" className="form-label" style={{ fontSize: '0.85rem' }}>Region (optional - AI can suggest)</label>
+                  <label htmlFor="regionSelect" className="form-label" style={{ fontSize: '0.85rem' }}>Region (optional)</label>
                   <select 
                       id="regionSelect"
                       className="form-select form-select-sm"
@@ -1028,7 +952,7 @@ function Wishlist({ planId, onAddToPlanning }) {
                       onChange={(e) => setSelectedRegion(e.target.value)}
                       disabled={isLoading}
                   >
-                      <option value="">Auto-suggest Region...</option>
+                      <option value="">Select Region...</option>
                       {regions.map(region => (
                           <option key={region.id} value={region.id}>
                               {region.name}
@@ -1073,6 +997,31 @@ function Wishlist({ planId, onAddToPlanning }) {
             </div>
           )}
         </div>
+      </div>
+      )}
+
+      {/* Toggle Add-wish button */}
+      <div className="mt-5 mb-4 d-flex justify-content-center">
+        <button
+          className="btn create-wish-btn"
+          onClick={() => {
+            if (showForm) {
+              resetForm();
+              setExpandedForm(false);
+            }
+            setShowForm(!showForm);
+            // Scroll into view when opening the form
+            if (!showForm) {
+              setTimeout(() => {
+                if (formRef.current) {
+                  formRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }, 0);
+            }
+          }}
+        >
+          {showForm ? 'Cancel' : (<><span className="plus-icon me-2">➕</span>Make a Wish</>)}
+        </button>
       </div>
 
       {isLoading && items.length === 0 ? (
@@ -1296,6 +1245,36 @@ function Wishlist({ planId, onAddToPlanning }) {
           max-height: 500px;
           opacity: 1;
           transition: max-height 0.5s ease-in, opacity 0.3s 0.1s ease-in;
+        }
+
+        /* Add-wish button styling (mirrors HomePage create-plan-btn) */
+        .create-wish-btn {
+          background-color: #2563eb;
+          color: white;
+          font-weight: 600;
+          font-size: 1.05rem;
+          padding: 0.7rem 1.8rem;
+          border-radius: 0.5rem;
+          border: none;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
+        }
+
+        .create-wish-btn:hover {
+          background-color: #1d4ed8;
+          color: white;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 10px rgba(37, 99, 235, 0.3);
+        }
+
+        .create-wish-btn:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+
+        .plus-icon {
+          font-size: 1rem;
+          display: inline-block;
         }
       `}</style>
     </div>
