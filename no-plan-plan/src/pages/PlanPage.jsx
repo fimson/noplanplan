@@ -6,6 +6,8 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebas
 import { db, storage } from '../firebase-config';
 import useTripConfig from '../hooks/useTripConfig';
 import countryToEmoji from 'country-to-emoji-flag';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import InviteModal from '../components/InviteModal.jsx';
 
 // Helper to format Date or Timestamp to YYYY-MM-DD
 const formatDateForInput = (dateOrTimestamp) => {
@@ -43,7 +45,9 @@ function PlanPage() {
     notes: '',
     flagEmoji: '',
     tagline: '',
-    createdAt: ''
+    createdAt: '',
+    members: [],
+    owner: ''
   });
   
   // Get appropriate flag for the plan
@@ -56,6 +60,8 @@ function PlanPage() {
   const [editForm, setEditForm] = useState({...plan});
   const [isLoading, setIsLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState(null); // null when idle
+  const { user } = useAuth();
+  const [showInvite, setShowInvite] = useState(false);
   
   // Default regions from config (fallback empty array)
   const defaultRegions = tripConfig?.defaultRegions || [];
@@ -90,7 +96,9 @@ function PlanPage() {
             notes: tripData.notes || '',
             flagEmoji: tripData.flagEmoji || '',
             tagline: tripData.tagline || '',
-            createdAt: formattedCreatedAt
+            createdAt: formattedCreatedAt,
+            members: tripData.members || [],
+            owner: tripData.owner || ''
           });
           setEditForm({
             id: tripId,
@@ -104,7 +112,9 @@ function PlanPage() {
             notes: tripData.notes || '',
             flagEmoji: tripData.flagEmoji || '',
             tagline: tripData.tagline || '',
-            createdAt: formattedCreatedAt
+            createdAt: formattedCreatedAt,
+            members: tripData.members || [],
+            owner: tripData.owner || ''
           });
         } else {
           // If the trip doesn't exist in Firestore yet, create it with default values
@@ -233,6 +243,8 @@ function PlanPage() {
       setIsLoading(false);
     }
   };
+
+  const isOwner = (plan.owner ? plan.owner === user?.uid : (plan.members?.includes(user?.uid)));
 
   return (
     <div className="plan-page text-center">
@@ -420,7 +432,7 @@ function PlanPage() {
               </div>
             </div>
             
-            <div className="d-flex justify-content-center mt-3">
+            <div className="d-flex justify-content-center mt-3 gap-2">
               <button 
                 onClick={() => setIsEditing(false)} 
                 className="btn btn-secondary me-2"
@@ -437,6 +449,9 @@ function PlanPage() {
                   <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                 ) : 'Save Changes'}
               </button>
+              {isOwner && (
+                <button className="btn btn-outline-info" onClick={()=>setShowInvite(true)}>Invite →</button>
+              )}
             </div>
           </div>
         </div>
@@ -547,6 +562,8 @@ function PlanPage() {
           </div>
         </div>
       )}
+      
+      {isOwner && <InviteModal tripId={tripId} show={showInvite} onClose={()=>setShowInvite(false)} />}
       
       <style jsx>{`
         .feature-card {

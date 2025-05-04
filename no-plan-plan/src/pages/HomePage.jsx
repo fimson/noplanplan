@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot, setDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import LoginGate from '../components/LoginGate.jsx';
 
 function HomePage() {
   const [plans, setPlans] = useState([]);
@@ -16,8 +18,11 @@ function HomePage() {
   const [showForm, setShowForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-  // Subscribe to trips collection for real-time updates
+  const { user } = useAuth();
+
+  // Subscribe to trips collection for real-time updates (only if logged in)
   useEffect(() => {
+    if (!user) return;
     const unsub = onSnapshot(collection(db, 'trips'), (snapshot) => {
       const fetched = [];
       snapshot.forEach((docSnap) => {
@@ -52,7 +57,7 @@ function HomePage() {
       setIsLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [user]);
 
   const handleCreatePlan = async () => {
     if (!newPlan.title.trim()) return;
@@ -65,7 +70,9 @@ function HomePage() {
       description: newPlan.description || 'No description provided',
       image: `https://source.unsplash.com/featured/?travel,${encodeURIComponent(newPlan.title)}`,
       createdAt: serverTimestamp(),
-      category: newPlan.category || 'Travel'
+      category: newPlan.category || 'Travel',
+      owner: user.uid,
+      members: [user.uid] // owner becomes first member
     };
 
     try {
@@ -100,6 +107,8 @@ function HomePage() {
       return "col-lg-3 col-md-6 col-12"; // Four cards per row on large screens
     }
   };
+
+  if (!user) return <LoginGate />;
 
   return (
     <div className="home-page text-center">
@@ -201,21 +210,21 @@ function HomePage() {
                 <div className="card-body text-center">
                   <div className="d-flex justify-content-center align-items-start">
                     <h5 className={`card-title modern-title ${plans.length > 1 ? 'text-truncate' : ''} w-100 text-center`}>
-                      <Link to={`/trip/${plan.id}`} className="text-info">
+                      <Link to={`/trip/${plan.id}`} className="text-info text-decoration-none">
                         {plan.title}
                       </Link>
                     </h5>
                   </div>
-                  <p className={`${plans.length > 1 ? "card-text description-text" : "card-text"} modern-text`}>
+                  <p className={`${plans.length > 1 ? 'card-text description-text' : 'card-text'} modern-text`}>
                     {plan.description}
                   </p>
                   <div className="delete-button-wrapper">
-                    <button 
-                      className="btn btn-sm btn-outline-danger delete-button" 
+                    <button
+                      className="btn btn-sm btn-outline-danger delete-button"
                       onClick={() => setShowDeleteConfirm(plan.id)}
                       aria-label="Delete plan"
                     >
-                      <span>🗑️</span>
+                      <span role="img" aria-label="delete">🗑️</span>
                     </button>
                   </div>
                 </div>
@@ -228,16 +237,17 @@ function HomePage() {
           No travel plans yet. Create your first plan to get started!
         </div>
       )}
-      
+
       <div className="mt-5 mb-4">
-        <button 
+        <button
           className="btn create-plan-btn"
           onClick={() => setShowForm(!showForm)}
         >
-          {showForm ? 'Cancel' : <><span className="plus-icon me-2">➕</span>Create New Plan</>}
+          {showForm ? 'Cancel' : (<><span className="plus-icon me-2">➕</span>Create New Plan</>)}
         </button>
       </div>
-      
+
+      {/* Additional styles (copied from original) */}
       <style>{`
         .description-text {
           display: -webkit-box;
@@ -246,7 +256,6 @@ function HomePage() {
           overflow: hidden;
           font-size: 0.9rem;
         }
-        
         .delete-confirm-overlay {
           position: absolute;
           top: 0;
@@ -260,13 +269,11 @@ function HomePage() {
           justify-content: center;
           border-radius: calc(0.375rem - 1px);
         }
-        
         .delete-confirm-dialog {
           padding: 1rem;
           text-align: center;
           color: white;
         }
-        
         .plan-card {
           border-radius: 0.5rem;
           overflow: hidden;
@@ -275,31 +282,26 @@ function HomePage() {
           transition: all 0.3s ease;
           position: relative;
         }
-        
         .plan-card:hover {
           transform: scale(1.05);
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
         }
-        
         .card-img-wrapper {
           position: relative;
           border-top-left-radius: 0.5rem;
           border-top-right-radius: 0.5rem;
         }
-        
         .card-img {
           border-top-left-radius: 0.5rem;
           border-top-right-radius: 0.5rem;
         }
-        
         .card-body {
           padding-top: 1rem;
           padding-bottom: 2.5rem;
-          border-bottom-left-radius: 0.5rem; 
+          border-bottom-left-radius: 0.5rem;
           border-bottom-right-radius: 0.5rem;
           position: relative;
         }
-        
         .category-badge {
           position: absolute;
           top: 10px;
@@ -313,40 +315,33 @@ function HomePage() {
           backdrop-filter: blur(5px);
           box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
-        
         .delete-button-wrapper {
           position: absolute;
           bottom: 10px;
           right: 10px;
         }
-        
         .delete-button {
           opacity: 0.7;
           transition: opacity 0.2s ease;
         }
-        
         .delete-button:hover {
           opacity: 1;
         }
-        
         .main-title {
           font-family: 'Inter', sans-serif;
           letter-spacing: -0.03em;
           font-weight: 700;
         }
-        
         .modern-title {
           font-family: 'Inter', sans-serif;
           font-weight: 600;
           letter-spacing: -0.01em;
         }
-        
         .modern-text {
           font-family: 'Inter', sans-serif;
           font-weight: 300;
           letter-spacing: 0.01em;
         }
-        
         .tagline {
           font-family: 'Inter', sans-serif;
           font-weight: 400;
@@ -359,7 +354,6 @@ function HomePage() {
           display: inline-block;
           text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
-        
         .tagline::before,
         .tagline::after {
           content: '—';
@@ -368,7 +362,6 @@ function HomePage() {
           display: inline-block;
           opacity: 0.7;
         }
-        
         .create-plan-btn {
           background-color: #2563eb;
           color: white;
@@ -380,19 +373,16 @@ function HomePage() {
           transition: all 0.2s ease;
           box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
         }
-        
         .create-plan-btn:hover {
           background-color: #1d4ed8;
           color: white;
           transform: translateY(-2px);
           box-shadow: 0 6px 10px rgba(37, 99, 235, 0.3);
         }
-        
         .create-plan-btn:active {
           transform: translateY(0);
           box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
         }
-        
         .plus-icon {
           font-size: 1rem;
           display: inline-block;
@@ -402,4 +392,4 @@ function HomePage() {
   );
 }
 
-export default HomePage; 
+export default HomePage;

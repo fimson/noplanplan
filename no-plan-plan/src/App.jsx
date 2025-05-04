@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from './contexts/AuthContext.jsx'
 import './App.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
@@ -12,11 +13,14 @@ import PlanWishlistPage from './pages/PlanWishlistPage'
 import BookingsPage from './pages/BookingsPage'
 import GuidePage from './components/GuidePage'
 import AboutTripPage from './pages/AboutTripPage'
+import ClaimPage from './pages/ClaimPage'
 
 function HeaderWithBackButton() {
   const location = useLocation();
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
+  
+  const { user, signIn, signOut } = useAuth();
   
   // Check if we're on a guide page
   const isGuidePage = location.pathname.includes('/guide/') || location.pathname.includes('/about');
@@ -42,7 +46,7 @@ function HeaderWithBackButton() {
   };
   
   return (
-    <header className="pb-3 mb-4 border-bottom position-relative">
+    <header className="pb-3 mb-4 border-bottom position-relative d-flex flex-column flex-md-row align-items-center justify-content-between">
       {!isHomePage && !isGuidePage && (
         <button 
           onClick={handleBack} 
@@ -52,10 +56,23 @@ function HeaderWithBackButton() {
           &larr;
         </button>
       )}
-      <div className="text-center">
+      <div className="text-center flex-grow-1">
         <Link to="/" className="text-decoration-none">
           <h3 className="fw-bold">NoPlanPlan</h3>
         </Link>
+      </div>
+      <div className="auth-controls mt-2 mt-md-0">
+        {user ? (
+          <div className="d-flex align-items-center gap-2">
+            {user.photoURL && (
+              <img src={user.photoURL} alt="avatar" width={32} height={32} className="rounded-circle" />
+            )}
+            <span className="text-light small">{user.displayName || user.email}</span>
+            <button className="btn btn-sm btn-outline-light" onClick={signOut}>Logout</button>
+          </div>
+        ) : (
+          <button className="btn btn-sm btn-primary" onClick={signIn}>Login</button>
+        )}
       </div>
     </header>
   );
@@ -77,6 +94,7 @@ function App() {
             <Route path="/trip/:tripId/bookings" element={<BookingsPage />} />
             <Route path="/trip/:tripId/about" element={<AboutTripPage />} />
             <Route path="/trip/:tripId/guide/:itemId" element={<GuidePage />} />
+            <Route path="/claim/:code" element={<ClaimPage />} />
           </Routes>
         </main>
         

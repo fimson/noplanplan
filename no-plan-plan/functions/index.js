@@ -24,6 +24,24 @@ admin.initializeApp();
 // IMPORTANT: Set this secret using `firebase functions:secrets:set OPENAI_SECRET_KEY`
 const openaiApiKey = defineSecret("OPENAI_SECRET_KEY");
 
+// Helper to verify Firebase ID token from Authorization header
+const verifyToken = async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Unauthorized: missing token' });
+    return null;
+  }
+  const idToken = authHeader.split('Bearer ')[1];
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    return decoded; // contains uid, email, etc.
+  } catch (err) {
+    console.error('Token verification failed', err);
+    res.status(401).json({ error: 'Unauthorized: invalid token' });
+    return null;
+  }
+};
+
 // HTTPS Function triggered by a request
 exports.processWishlistItem = onRequest(
   // Ensure the function has access to the secret and set memory/CPU if needed
@@ -37,6 +55,10 @@ exports.processWishlistItem = onRequest(
         console.log("Received non-POST request:", req.method);
         return res.status(405).send({ error: "Method Not Allowed" });
       }
+
+      // Verify Firebase ID token
+      const decoded = await verifyToken(req, res);
+      if (!decoded) return;
 
       // Extract title and availableRegions from the request body
       const { title, availableRegions } = req.body;
@@ -210,6 +232,10 @@ exports.generateGuide = onRequest(
         return res.status(405).send({ error: "Method Not Allowed" });
       }
 
+      // Verify Firebase ID token
+      const decoded = await verifyToken(req, res);
+      if (!decoded) return;
+
       // Extract data from the request body
       const { prompt, language, context, guideType, tripId, itemId } = req.body;
       console.log("Received guide generation request:", {
@@ -321,5 +347,125 @@ exports.generateThumbnails = onObjectFinalized({ memory: "1GiB", timeoutSeconds:
       contentType: "image/webp",
       cacheControl: "public,max-age=31536000,immutable",
     },
+  });
+});
+
+// **** INVITE MANAGEMENT FUNCTIONS **** //
+
+// Helper to ensure caller is trip owner
+const ensureOwner = async (tripId, uid) => {
+  const tripDoc = await admin.firestore().doc(`trips/${tripId}`).get();
+  if (!tripDoc.exists) throw new Error('Trip not found');
+  const data = tripDoc.data();
+  if (data.owner) {
+    if (data.owner !== uid) throw new Error('Forbidden');
+  } else {
+    // Fallback: allow if caller is already in members array
+    if (!data.members || !data.members.includes(uid)) throw new Error('Forbidden');
+  }
+};
+
+// Create short invite code (owner only)
+exports.createInvite = onRequest({ timeoutSeconds: 10, memory: '128MiB' }, async (req, res) => {
+  cors(req, res, async () => {
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+    const decoded = await verifyToken(req, res);
+    if (!decoded) return; // verifyToken sent response
+
+    const { tripId } = req.body;
+    if (!tripId) return res.status(400).json({ error: 'tripId required' });
+
+    try {
+      await ensureOwner(tripId, decoded.uid);
+
+      // generate 6-char code
+      let code;
+      let exists = true;
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const gen = () => Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      while (exists) {
+        code = gen();
+        const snap = await admin.firestore().doc(`invites/${code}`).get();
+        exists = snap.exists;
+      }
+
+      await admin.firestore().doc(`invites/${code}`).set({
+        tripId,
+        role: 'member',
+        usedBy: null,
+        created: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ code });
+    } catch (err) {
+      console.error(err);
+      return res.status(err.message === 'Forbidden' ? 403 : 500).json({ error: err.message });
+    }
+  });
+});
+
+// Invite by email (adds user UID directly)
+exports.inviteByEmail = onRequest({ timeoutSeconds: 15, memory: '256MiB' }, async (req, res) => {
+  cors(req, res, async () => {
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+    const decoded = await verifyToken(req, res);
+    if (!decoded) return;
+
+    const { tripId, email } = req.body;
+    if (!tripId || !email) return res.status(400).json({ error: 'tripId and email required' });
+
+    try {
+      await ensureOwner(tripId, decoded.uid);
+
+      // Find or create user
+      let targetUser;
+      try {
+        targetUser = await admin.auth().getUserByEmail(email);
+      } catch (err) {
+        if (err.code === 'auth/user-not-found') {
+          targetUser = await admin.auth().createUser({ email });
+          // Optionally send email invite link here
+        } else throw err;
+      }
+
+      const tripRef = admin.firestore().doc(`trips/${tripId}`);
+      await tripRef.update({ members: admin.firestore.FieldValue.arrayUnion(targetUser.uid) });
+
+      return res.json({ uid: targetUser.uid });
+    } catch (err) {
+      console.error(err);
+      const status = err.message === 'Forbidden' ? 403 : 500;
+      return res.status(status).json({ error: err.message });
+    }
+  });
+});
+
+// Claim invite code (any authenticated user)
+exports.claimInvite = onRequest({ timeoutSeconds: 15, memory: '128MiB' }, async (req, res) => {
+  cors(req, res, async () => {
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+    const decoded = await verifyToken(req, res);
+    if (!decoded) return;
+
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'code required' });
+
+    const inviteRef = admin.firestore().doc(`invites/${code}`);
+    const inviteSnap = await inviteRef.get();
+    if (!inviteSnap.exists) return res.status(400).json({ error: 'Invalid code' });
+    const invite = inviteSnap.data();
+    if (invite.usedBy) return res.status(400).json({ error: 'Code already used' });
+
+    const tripRef = admin.firestore().doc(`trips/${invite.tripId}`);
+
+    await admin.firestore().runTransaction(async (tx) => {
+      tx.update(tripRef, { members: admin.firestore.FieldValue.arrayUnion(decoded.uid) });
+      tx.update(inviteRef, { usedBy: decoded.uid, claimed: admin.firestore.FieldValue.serverTimestamp() });
+    });
+
+    return res.json({ tripId: invite.tripId });
   });
 });

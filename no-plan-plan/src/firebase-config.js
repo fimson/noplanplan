@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, enableIndexedDbPersistence, connectFirestoreEmulator, collection, doc, getDoc, setDoc } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 // Your web app's Firebase configuration
 // Replace the placeholder values below with your actual Firebase project configuration
@@ -19,11 +20,13 @@ console.log("Initializing Firebase with config:", { projectId: firebaseConfig.pr
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with error handling
+// Initialize services
 const db = getFirestore(app);
-
-// Initialize Firebase Storage
 const storage = getStorage(app);
+
+// Initialize Firebase Auth
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
 // For development/testing only
 const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -114,4 +117,4 @@ setTimeout(() => {
     checkFirestoreConnection();
 }, 2000);  // 2 second delay
 
-export { db, checkFirestoreConnection, storage }; 
+export { db, storage, auth, googleProvider, checkFirestoreConnection }; 
